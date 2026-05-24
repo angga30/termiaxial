@@ -1,0 +1,119 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: '20'
+
+jobs:
+  # Automated PR checks
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if PR has description
+        run: |
+          if [ -z "${{ github.event.pull_request.body }}" ]; then
+            echo "❌ PR description is required"
+            exit 1
+          fi
+          echo "✅ PR has description"
+
+      - name: Check PR size
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          echo "📊 Changed files: $CHANGED_FILES"
+          if [ "$CHANGED_FILES" -gt 50 ]; then
+            echo "⚠️  Warning: Large PR ($CHANGED_FILES files). Consider splitting."
+          fi
+
+      - name: Check for breaking changes
+        run: |
+          if git diff origin/${{ github.base_ref }}...HEAD | grep -q "BREAKING CHANGE"; then
+            echo "⚠️  Breaking changes detected - ensure this is documented"
+          fi
+
+  # Automated code review
+  code-review:
+    name: Automated Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npm run build
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Run cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        continue-on-error: true
+
+      - name: Run cargo fmt --check
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
+  # Check labels
+  label-check:
+    name: Label Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check required labels
+        run: |
+          LABELS="${{ toJson(github.event.pull_request.labels.*.name) }}"
+          echo "PR Labels: $LABELS"
+
+          # Check if PR has any labels
+          if [ "$LABELS" == "[]" ]; then
+            echo "⚠️  No labels found. Please add labels: enhancement, bug, documentation, breaking-change"
+            exit 1
+          fi
+
+  # Dependency review
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review (Rust)
+        uses: EmbarkStudios/cargo-deny-action@v1
+        continue-on-error: true
+
+      - name: Dependency Review (Node.js)
+        uses: actions/dependency-review-action@v3
+        continue-on-error: true
