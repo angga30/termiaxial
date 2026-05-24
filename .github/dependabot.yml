@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "updates": [
+    {
+      "package-ecosystem": "npm",
+      "directory": "/",
+      "schedule": {
+        "interval": "weekly",
+        "day": "monday",
+        "time": "09:00"
+      },
+      "open-pull-requests-limit": 10,
+      "versioning-strategy": "increase",
+      "allow": [
+        "production",
+        "development"
+      ],
+      "labels": [
+        "dependencies",
+        "npm"
+      ],
+      "commit-message": {
+        "prefix": "deps(npm)",
+        "prefix-development": "deps(npm-dev)",
+        "include": "scope"
+      }
+    },
+    {
+      "package-ecosystem": "cargo",
+      "directory": "/src-tauri",
+      "schedule": {
+        "interval": "weekly",
+        "day": "monday",
+        "time": "09:00"
+      },
+      "open-pull-requests-limit": 10,
+      "versioning-strategy": "increase",
+      "labels": [
+        "dependencies",
+        "rust"
+      ],
+      "commit-message": {
+        "prefix": "deps(rust)",
+        "include": "scope"
+      }
+    },
+    {
+      "package-ecosystem": "github-actions",
+      "directory": "/",
+      "schedule": {
+        "interval": "weekly",
+        "day": "monday",
+        "time": "09:00"
+      },
+      "labels": [
+        "dependencies",
+        "github-actions"
+      ],
+      "commit-message": {
+        "prefix": "deps(ci)",
+        "include": "scope"
+      }
+    }
+  ]
+}

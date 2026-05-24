@@ -1,0 +1,26 @@
+{
+  "recommendations": {
+    "config": {
+      "hardening": {
+        "use-newer-versions": true,
+        "skip-builtins": true
+      }
+    }
+  },
+  "queries": [
+    "javascript-and-typescript",
+    "rust",
+    "security-and-quality"
+  ],
+  "paths-ignore": [
+    "node_modules",
+    "src-tauri/target",
+    "dist",
+    "build"
+  ],
+  "languages": [
+    "javascript",
+    "typescript",
+    "rust"
+  ]
+}
