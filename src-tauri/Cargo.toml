@@ -1,6 +1,6 @@
 [package]
 name = "termiaxial"
-version = "0.1.0"
+version = "1.0.0"
 description = "Termiaxial (Tmax) - Ultra-lightweight SSH/SFTP client"
 authors = ["you"]
 edition = "2021"

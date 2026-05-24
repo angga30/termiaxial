@@ -12,6 +12,14 @@ pub struct Credential {
     pub user: Option<String>,
     pub secret: Option<Vec<u8>>,
     pub added_at: String,
+    pub workspace_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -225,4 +233,38 @@ pub async fn vault_get_metadata(
     db: State<'_, DbManager>,
 ) -> Result<Option<String>, String> {
     db.get_metadata(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn vault_create_workspace(
+    workspace: Workspace,
+    db: State<'_, DbManager>,
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    // Safety check: ensure vault is unlocked
+    if state.0.read().unwrap().is_none() {
+        return Err("Vault is locked".to_string());
+    }
+
+    db.create_workspace(&workspace.id, &workspace.name, &workspace.created_at)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn vault_list_workspaces(
+    db: State<'_, DbManager>,
+    state: State<'_, VaultState>,
+) -> Result<Vec<Workspace>, String> {
+    // Safety check: ensure vault is unlocked
+    if state.0.read().unwrap().is_none() {
+        return Err("Vault is locked".to_string());
+    }
+
+    let workspaces = db.list_workspaces().map_err(|e| e.to_string())?;
+    
+    Ok(workspaces.into_iter().map(|(id, name, created_at)| Workspace {
+        id,
+        name,
+        created_at,
+    }).collect())
 }

@@ -9,8 +9,8 @@ use crate::commands::sftp::{
 };
 use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
 use crate::commands::vault::{
-    vault_add_credential, vault_delete_credential, vault_get_metadata, vault_list_credentials,
-    vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
+    vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata, vault_list_credentials,
+    vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
     vault_update_credential,
 };
 use crate::vault::{DbManager, VaultState};
@@ -50,9 +50,11 @@ pub fn run() {
             sftp_upload,
             sftp_transfer_remote,
             vault_add_credential,
+            vault_create_workspace,
             vault_delete_credential,
             vault_update_credential,
             vault_list_credentials,
+            vault_list_workspaces,
             vault_set_metadata,
             vault_get_metadata,
             vault_status,

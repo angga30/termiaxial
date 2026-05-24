@@ -2,11 +2,11 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Topbar } from "./components/layout/Topbar";
 import { TerminalView } from "./components/terminal/TerminalView";
 import { DualPanelExplorer } from "./components/sftp/DualPanelExplorer";
-import { AiSettings } from "./components/settings/AiSettings";
+import { Settings } from "./components/settings/Settings";
 import { AIChatModal } from "./components/ai/AIChatModal";
 import { VaultAuth } from "./components/vault/VaultAuth";
 import { CredentialsView } from "./components/vault/CredentialsView";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useVaultStore, Credential } from "./stores/vault-store";
 import { useTerminalStore } from "./stores/terminal-store";
 import { useTransferStore } from "./stores/transfer-store";
@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   HardDrive,
+  Search,
 } from "lucide-react";
 import { SshOptions } from "./hooks/use-ssh";
 
@@ -29,7 +30,7 @@ function App() {
   const [editingCredential, setEditingCredential] = useState<Credential | null>(
     null,
   );
-  const [isVaultCollapsed, setIsVaultCollapsed] = useState(false);
+   const [isVaultCollapsed, setIsVaultCollapsed] = useState(false);
   const [aiContext, setAiContext] = useState<string | null>(null);
 
   const {
@@ -40,7 +41,7 @@ function App() {
     updateCredential,
     searchTerm,
     setSearchTerm,
-    getFilteredCredentials,
+    credentials,
   } = useVaultStore();
   const {
     sessions,
@@ -50,11 +51,6 @@ function App() {
     removeSession,
   } = useTerminalStore();
   const { initListener, transfers } = useTransferStore();
-
-  const filteredCredentials = useMemo(
-    () => getFilteredCredentials(),
-    [getFilteredCredentials, searchTerm],
-  );
 
   useEffect(() => {
     refreshStatus();
@@ -106,11 +102,7 @@ function App() {
       />
 
       <main className="main flex-1 flex flex-col min-w-0">
-        <Topbar
-          onNewSession={openAddModal}
-          searchValue={searchTerm}
-          onSearchChange={setSearchTerm}
-        />
+        <Topbar />
 
         <div className="body flex-1 flex overflow-hidden relative">
           <section
@@ -142,12 +134,6 @@ function App() {
                   onClose={() => removeSession(s.id)}
                 />
               ))}
-              <button
-                onClick={openAddModal}
-                className="tabadd h-9 px-3 flex items-center justify-center rounded-t-lg text-fg2 hover:bg-white/5 hover:text-fg transition-all mb-[-1px]"
-              >
-                <Plus size={16} />
-              </button>
             </div>
 
             <div className="flex-1 relative bg-black">
@@ -195,7 +181,7 @@ function App() {
           <div
             className={`flex-1 ${activeView === "settings" ? "flex" : "hidden"}`}
           >
-            <AiSettings />
+            <Settings />
           </div>
 
           {activeView === "terminal" && (
@@ -214,13 +200,26 @@ function App() {
               </button>
 
               <div className="phdr p-4 border-b border-white/5 bg-white/[0.02]">
-                <div className="ptitle text-sm font-semibold flex items-center gap-2">
+                <div className="ptitle text-sm font-semibold flex items-center gap-2 mb-3">
                   <Shield size={18} className="text-cyan" /> Quick Vault
+                </div>
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+                    size={14}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search credentials..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-white/5 border border-white/5 rounded-lg py-2 pl-9 pr-3 text-xs outline-none focus:border-cyan/50 focus:ring-2 focus:ring-cyan/10 transition-all placeholder:text-muted"
+                  />
                 </div>
               </div>
 
               <div className="pcontent flex-1 overflow-auto p-3">
-                {filteredCredentials.map((cred) => (
+                {credentials.map((cred) => (
                   <CredentialCard
                     key={cred.id}
                     name={cred.name}

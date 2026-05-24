@@ -14,11 +14,21 @@ impl DbManager {
             conn: Mutex::new(conn),
         };
         manager.init_tables()?;
+        manager.migrate_database()?;
         Ok(manager)
     }
 
     fn init_tables(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS credentials (
                 id TEXT PRIMARY KEY,
@@ -27,7 +37,8 @@ impl DbManager {
                 host TEXT,
                 user TEXT,
                 secret BLOB,
-                added_at TEXT NOT NULL
+                added_at TEXT NOT NULL,
+                workspace_id TEXT
             )",
             [],
         )?;
@@ -43,11 +54,22 @@ impl DbManager {
         Ok(())
     }
 
+    fn migrate_database(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        let _ = conn.execute(
+            "ALTER TABLE credentials ADD COLUMN workspace_id TEXT",
+            [],
+        );
+        
+        Ok(())
+    }
+
     pub fn add_credential(&self, cred: &Credential) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO credentials (id, name, type, host, user, secret, added_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO credentials (id, name, type, host, user, secret, added_at, workspace_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 cred.id,
                 cred.name,
@@ -55,7 +77,8 @@ impl DbManager {
                 cred.host,
                 cred.user,
                 cred.secret,
-                cred.added_at
+                cred.added_at,
+                cred.workspace_id
             ],
         )?;
         Ok(())
@@ -64,7 +87,7 @@ impl DbManager {
     pub fn list_credentials(&self) -> Result<Vec<Credential>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
-            conn.prepare("SELECT id, name, type, host, user, secret, added_at FROM credentials")?;
+            conn.prepare("SELECT id, name, type, host, user, secret, added_at, workspace_id FROM credentials")?;
         let cred_iter = stmt.query_map([], |row| {
             Ok(Credential {
                 id: row.get(0)?,
@@ -74,6 +97,7 @@ impl DbManager {
                 user: row.get(4)?,
                 secret: row.get(5)?,
                 added_at: row.get(6)?,
+                workspace_id: row.get(7)?,
             })
         })?;
 
@@ -93,13 +117,14 @@ impl DbManager {
     pub fn update_credential(&self, cred: &Credential) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE credentials SET name = ?1, type = ?2, host = ?3, user = ?4, secret = ?5 WHERE id = ?6",
+            "UPDATE credentials SET name = ?1, type = ?2, host = ?3, user = ?4, secret = ?5, workspace_id = ?6 WHERE id = ?7",
             params![
                 cred.name,
                 cred.r#type,
                 cred.host,
                 cred.user,
                 cred.secret,
+                cred.workspace_id,
                 cred.id
             ],
         )?;
@@ -126,5 +151,28 @@ impl DbManager {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn create_workspace(&self, id: &str, name: &str, created_at: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, created_at) VALUES (?1, ?2, ?3)",
+            params![id, name, created_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_workspaces(&self) -> Result<Vec<(String, String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id, name, created_at FROM workspaces")?;
+        let ws_iter = stmt.query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+
+        let mut results = Vec::new();
+        for ws in ws_iter {
+            results.push(ws?);
+        }
+        Ok(results)
     }
 }

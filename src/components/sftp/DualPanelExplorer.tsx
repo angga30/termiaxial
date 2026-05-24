@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useSftp, SftpEntry } from "../../hooks/use-sftp";
 import { useTerminalStore } from "../../stores/terminal-store";
+import { useVaultStore } from "../../stores/vault-store";
 import { invoke } from "@tauri-apps/api/core";
 
 export const DualPanelExplorer: React.FC = () => {
@@ -63,6 +64,8 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
   otherPanel,
 }) => {
   const sessions = useTerminalStore((state) => state.sessions);
+  const { addSession } = useTerminalStore();
+  const { credentials } = useVaultStore();
   const {
     entries,
     loading,
@@ -258,15 +261,35 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
         <select
           value={selectedSessionId}
           onChange={(e) => {
-            setSelectedSessionId(e.target.value);
+            const newSessionId = e.target.value;
+            setSelectedSessionId(newSessionId);
             setCurrentPath("");
+            
+            if (newSessionId !== "local") {
+              const cred = credentials.find((c) => c.id === newSessionId);
+              if (cred && !sessions.find((s) => s.id === cred.id)) {
+                const secretStr = cred.secret
+                  ? new TextDecoder().decode(new Uint8Array(cred.secret))
+                  : undefined;
+                
+                addSession(cred.name, {
+                  host: cred.host || "",
+                  port: 22,
+                  user: cred.user || "",
+                  password:
+                    cred.type === "password" ? secretStr : undefined,
+                  private_key:
+                    cred.type === "ssh" ? secretStr : undefined,
+                });
+              }
+            }
           }}
           className="bg-white/5 border border-white/5 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-cyan/50 transition-all flex-1 font-medium"
         >
           <option value="local">💻 Local Machine</option>
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              🌐 {s.name}
+          {credentials.map((cred) => (
+            <option key={cred.id} value={cred.id}>
+              🔑 {cred.name}
             </option>
           ))}
         </select>
