@@ -30,6 +30,8 @@ impl SshSession {
     )> {
         tracing::debug!("Connecting to server...");
         let config = client::Config {
+            keepalive_interval: Some(Duration::from_secs(30)),
+            keepalive_max: 3,
             ..Default::default()
         };
         let config = Arc::new(config);
