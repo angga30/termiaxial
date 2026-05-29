@@ -1,0 +1,41 @@
+{
+  "id": "light",
+  "name": "Light",
+  "colors": {
+    "bg": "#ffffff",
+    "bgSecondary": "#f5f5f7",
+    "bgTertiary": "#eaeaef",
+    "fg": "#1a1a2e",
+    "fgSecondary": "#4a4a5a",
+    "fgMuted": "#8a8a9a",
+    "accent": "#2563eb",
+    "accentHover": "#1d4ed8",
+    "border": "rgba(0, 0, 0, 0.1)",
+    "error": "#dc2626",
+    "success": "#16a34a",
+    "warning": "#d97706"
+  },
+  "terminal": {
+    "background": "#ffffff",
+    "foreground": "#1a1a2e",
+    "cursor": "#2563eb",
+    "cursorAccent": "#ffffff",
+    "selectionBackground": "rgba(37, 99, 235, 0.2)",
+    "black": "#1a1a2e",
+    "red": "#dc2626",
+    "green": "#16a34a",
+    "yellow": "#d97706",
+    "blue": "#2563eb",
+    "magenta": "#7c3aed",
+    "cyan": "#0891b2",
+    "white": "#f5f5f7",
+    "brightBlack": "#4a4a5a",
+    "brightRed": "#ef4444",
+    "brightGreen": "#22c55e",
+    "brightYellow": "#f59e0b",
+    "brightBlue": "#3b82f6",
+    "brightMagenta": "#8b5cf6",
+    "brightCyan": "#06b6d4",
+    "brightWhite": "#ffffff"
+  }
+}
