@@ -16,8 +16,8 @@ use crate::commands::vault::{
 };
 use crate::vault::{DbManager, VaultState};
 use dashmap::DashMap;
-use std::sync::RwLock;
 use tauri::Manager;
+use tokio::sync::RwLock;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
