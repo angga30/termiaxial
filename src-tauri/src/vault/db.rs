@@ -10,11 +10,12 @@ pub struct DbManager {
 impl DbManager {
     pub fn new(path: PathBuf) -> Result<Self> {
         let conn = Connection::open(path)?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let manager = Self {
             conn: Mutex::new(conn),
         };
         manager.init_tables()?;
-        manager.migrate_database()?;
+        manager.run_migrations()?;
         Ok(manager)
     }
 
@@ -54,14 +55,40 @@ impl DbManager {
         Ok(())
     }
 
-    fn migrate_database(&self) -> Result<()> {
+    fn run_migrations(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        
-        let _ = conn.execute(
-            "ALTER TABLE credentials ADD COLUMN workspace_id TEXT",
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )",
             [],
-        );
-        
+        )?;
+
+        let current_version: i32 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM _migrations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let migrations: Vec<(i32, &str)> = vec![
+            (1, "ALTER TABLE credentials ADD COLUMN workspace_id TEXT"),
+        ];
+
+        for (version, sql) in migrations {
+            if version > current_version {
+                conn.execute(sql, [])?;
+                conn.execute(
+                    "INSERT INTO _migrations (version, applied_at) VALUES (?1, datetime('now'))",
+                    params![version],
+                )?;
+                tracing::info!("Applied migration v{}", version);
+            }
+        }
+
         Ok(())
     }
 
