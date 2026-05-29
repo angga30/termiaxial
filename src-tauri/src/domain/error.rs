@@ -51,3 +51,9 @@ impl From<std::io::Error> for TmaxError {
         TmaxError::Io(e.to_string())
     }
 }
+
+impl From<anyhow::Error> for TmaxError {
+    fn from(e: anyhow::Error) -> Self {
+        TmaxError::General(e.to_string())
+    }
+}

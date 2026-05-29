@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::domain::error::TmaxError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +34,7 @@ struct OpenAIRequestBody {
 }
 
 #[tauri::command]
-pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
+pub async fn ai_analyze(request: AiRequest) -> Result<String, TmaxError> {
     tracing::debug!("Starting analysis with provider: {} and model: {}", request.provider, request.model);
     let client = Client::new();
 
@@ -50,7 +50,6 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
                 .clone()
                 .unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string());
 
-            // Auto-append standard path if using a custom endpoint and it's missing
             if request.provider == "openai-compatible" && !endpoint.ends_with("/chat/completions") {
                 tracing::debug!("Suffix /chat/completions missing, appending automatically");
                 if !endpoint.ends_with('/') {
@@ -79,9 +78,8 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
             }
 
             let resp = req.send().await.map_err(|e| {
-                let err = format!("Request failed: {}", e);
-                tracing::error!("{}", err);
-                err
+                tracing::error!("Request failed: {}", e);
+                TmaxError::Ai(format!("Request failed: {}", e))
             })?;
 
             tracing::debug!("Received response with status: {}", resp.status());
@@ -89,13 +87,12 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
             if !resp.status().is_success() {
                 let err_text = resp.text().await.unwrap_or_default();
                 tracing::error!("API Error details: {}", err_text);
-                return Err(format!("API Error: {}", err_text));
+                return Err(TmaxError::Ai(format!("API Error: {}", err_text)));
             }
 
             let data: OpenAIResponse = resp.json().await.map_err(|e| {
-                let err = format!("Failed to parse response: {}", e);
-                tracing::error!("{}", err);
-                err
+                tracing::error!("Failed to parse response: {}", e);
+                TmaxError::Ai(format!("Failed to parse response: {}", e))
             })?;
 
             tracing::info!("Analysis successful");
@@ -136,17 +133,15 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
                 .send()
                 .await
                 .map_err(|e| {
-                    let err = format!("Ollama request failed: {}", e);
-                    tracing::error!("{}", err);
-                    err
+                    tracing::error!("Ollama request failed: {}", e);
+                    TmaxError::Ai(format!("Ollama request failed: {}", e))
                 })?;
 
             tracing::debug!("Received Ollama response with status: {}", resp.status());
 
             let data: OllamaResponse = resp.json().await.map_err(|e| {
-                let err = format!("Failed to parse Ollama response: {}", e);
-                tracing::error!("{}", err);
-                err
+                tracing::error!("Failed to parse Ollama response: {}", e);
+                TmaxError::Ai(format!("Failed to parse Ollama response: {}", e))
             })?;
 
             tracing::info!("Ollama analysis successful");
@@ -154,7 +149,7 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
         }
         _ => {
             tracing::error!("Unsupported provider: {}", request.provider);
-            Err("Unsupported provider".to_string())
+            Err(TmaxError::Ai("Unsupported provider".to_string()))
         }
     }
 }
