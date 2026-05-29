@@ -1,6 +1,6 @@
 use crate::commands::ssh::SessionManager;
 use crate::domain::error::TmaxError;
-use russh_sftp::client::SftpSession;
+use crate::ssh::create_sftp_session;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -83,22 +83,7 @@ pub async fn sftp_list_dir(
     let path = if path.is_empty() { "/" } else { &path };
     if let Some(session) = state.sessions.get(&session_id) {
         tracing::debug!("Opening new channel for SFTP subsystem");
-        let channel = session.handle.channel_open_session().await.map_err(|e| {
-            tracing::error!("Failed to open channel: {:?}", e);
-            TmaxError::Sftp(format!("Failed to open channel: {:?}", e))
-        })?;
-
-        tracing::debug!("Requesting SFTP subsystem");
-        channel.request_subsystem(true, "sftp").await.map_err(|e| {
-            tracing::error!("Failed to request sftp subsystem: {:?}", e);
-            TmaxError::Sftp(format!("Failed to request sftp subsystem: {:?}", e))
-        })?;
-
-        tracing::debug!("Initializing SFTP session over stream");
-        let sftp = SftpSession::new(channel.into_stream()).await.map_err(|e| {
-            tracing::error!("Failed to create sftp session: {:?}", e);
-            TmaxError::Sftp(format!("Failed to create sftp session: {:?}", e))
-        })?;
+        let sftp = create_sftp_session(&session.handle).await?;
 
         tracing::debug!("Reading remote directory contents");
         let entries = sftp.read_dir(path).await.map_err(|e| {
@@ -145,19 +130,7 @@ pub async fn sftp_download(
     state: State<'_, SessionManager>,
 ) -> Result<(), TmaxError> {
     if let Some(session) = state.sessions.get(&session_id) {
-        let channel = session
-            .handle
-            .channel_open_session()
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to open channel: {:?}", e)))?;
-        channel
-            .request_subsystem(true, "sftp")
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to request sftp subsystem: {:?}", e)))?;
-
-        let sftp = SftpSession::new(channel.into_stream())
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to create sftp session: {:?}", e)))?;
+        let sftp = create_sftp_session(&session.handle).await?;
 
         let mut remote_file = sftp
             .open(&remote_path)
@@ -224,19 +197,7 @@ pub async fn sftp_upload(
     state: State<'_, SessionManager>,
 ) -> Result<(), TmaxError> {
     if let Some(session) = state.sessions.get(&session_id) {
-        let channel = session
-            .handle
-            .channel_open_session()
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to open channel: {:?}", e)))?;
-        channel
-            .request_subsystem(true, "sftp")
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to request sftp subsystem: {:?}", e)))?;
-
-        let sftp = SftpSession::new(channel.into_stream())
-            .await
-            .map_err(|e| TmaxError::Sftp(format!("Failed to create sftp session: {:?}", e)))?;
+        let sftp = create_sftp_session(&session.handle).await?;
 
         let mut local_file = tokio::fs::File::open(&local_path)
             .await
@@ -317,17 +278,7 @@ pub async fn sftp_transfer_remote(
         .handle
         .clone();
 
-    let src_channel = src_handle
-        .channel_open_session()
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to open src channel: {:?}", e)))?;
-    src_channel
-        .request_subsystem(true, "sftp")
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to request src sftp: {:?}", e)))?;
-    let src_sftp = SftpSession::new(src_channel.into_stream())
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to create src sftp session: {:?}", e)))?;
+    let src_sftp = create_sftp_session(&src_handle).await?;
     let mut src_file = src_sftp
         .open(&src_path)
         .await
@@ -341,17 +292,7 @@ pub async fn sftp_transfer_remote(
         .to_string_lossy()
         .to_string();
 
-    let dest_channel = dest_handle
-        .channel_open_session()
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to open dest channel: {:?}", e)))?;
-    dest_channel
-        .request_subsystem(true, "sftp")
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to request dest sftp: {:?}", e)))?;
-    let dest_sftp = SftpSession::new(dest_channel.into_stream())
-        .await
-        .map_err(|e| TmaxError::Sftp(format!("Failed to create dest sftp session: {:?}", e)))?;
+    let dest_sftp = create_sftp_session(&dest_handle).await?;
     let mut dest_file = dest_sftp
         .create(&dest_path)
         .await
