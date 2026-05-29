@@ -82,9 +82,10 @@ pub async fn connect_ssh(
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     if handle.is_closed() {
-                        tracing::debug!("Connection closed detected by keep-alive loop");
+                        tracing::info!("Connection closed detected by keep-alive check");
                         break;
                     }
+                    tracing::trace!("Keep-alive tick: connection still alive");
                 }
             }
         }
