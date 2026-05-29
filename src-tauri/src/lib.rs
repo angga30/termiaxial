@@ -5,6 +5,7 @@ mod ssh;
 mod vault;
 
 use crate::commands::ai::ai_analyze;
+use crate::commands::history::{history_clear, history_list, history_record, history_search};
 use crate::commands::sftp::{
     sftp_download, sftp_get_home_dir, sftp_list_dir, sftp_list_local_dir, sftp_transfer_remote,
     sftp_upload,
@@ -77,7 +78,11 @@ pub fn run() {
             snippet_list,
             snippet_delete,
             snippet_update,
-            snippet_search
+            snippet_search,
+            history_record,
+            history_list,
+            history_search,
+            history_clear
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
