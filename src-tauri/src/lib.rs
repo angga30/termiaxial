@@ -10,6 +10,7 @@ use crate::commands::sftp::{
     sftp_upload,
 };
 use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
+use crate::domain::events::EventBus;
 use crate::commands::vault::{
     vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata, vault_list_credentials,
     vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
@@ -27,6 +28,7 @@ pub fn run() {
         .manage(SessionManager {
             sessions: DashMap::new(),
         })
+        .manage(EventBus::new(256))
         .manage(VaultState(RwLock::new(None)))
         .setup(|app| {
             crate::infrastructure::logging::init();
