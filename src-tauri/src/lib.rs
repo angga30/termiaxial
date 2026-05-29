@@ -1,4 +1,5 @@
 mod commands;
+mod domain;
 mod ssh;
 mod vault;
 

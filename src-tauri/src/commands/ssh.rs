@@ -1,3 +1,4 @@
+use crate::domain::models::ConnectionOptions;
 use crate::ssh::{SshCommand, SshSession};
 use anyhow::Result;
 use dashmap::DashMap;
@@ -9,15 +10,6 @@ use uuid::Uuid;
 
 pub struct SessionManager {
     pub sessions: DashMap<String, SshSession>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct ConnectionOptions {
-    pub host: String,
-    pub port: u16,
-    pub user: String,
-    pub password: Option<String>,
-    pub private_key: Option<String>,
 }
 
 #[tauri::command]

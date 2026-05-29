@@ -1,4 +1,4 @@
-use crate::commands::vault::Credential;
+use crate::domain::models::Credential;
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::sync::Mutex;
