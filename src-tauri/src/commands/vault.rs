@@ -107,7 +107,7 @@ pub async fn vault_add_credential(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    println!("Backend: Adding credential: {:?}", cred);
+    tracing::info!("Adding credential: {:?}", cred);
 
     let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
@@ -120,7 +120,7 @@ pub async fn vault_add_credential(
 
     db.add_credential(&cred).map_err(|e| {
         let err_msg = format!("Database error: {}", e);
-        eprintln!("{}", err_msg);
+        tracing::error!("{}", err_msg);
         err_msg
     })
 }
@@ -131,7 +131,7 @@ pub async fn vault_delete_credential(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    println!("Backend: Deleting credential: {}", id);
+    tracing::info!("Deleting credential: {}", id);
 
     // Safety check: ensure vault is unlocked (though delete doesn't need the key)
     if state.0.read().await.is_none() {
@@ -147,7 +147,7 @@ pub async fn vault_update_credential(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    println!("Backend: Updating credential: {:?}", cred);
+    tracing::info!("Updating credential: {:?}", cred);
 
     let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
@@ -166,14 +166,14 @@ pub async fn vault_list_credentials(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
 ) -> Result<Vec<Credential>, String> {
-    println!("Backend: Listing credentials");
+    tracing::info!("Listing credentials");
 
     let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
 
     let mut creds = db.list_credentials().map_err(|e| {
         let err_msg = format!("Database error: {}", e);
-        eprintln!("{}", err_msg);
+        tracing::error!("{}", err_msg);
         err_msg
     })?;
 
@@ -184,7 +184,7 @@ pub async fn vault_list_credentials(
                     cred.secret = Some(decrypted);
                 }
                 Err(_) => {
-                    eprintln!("Failed to decrypt credential {}", cred.id);
+                    tracing::error!("Failed to decrypt credential {}", cred.id);
                     // Keep secret as None if decryption fails
                 }
             }

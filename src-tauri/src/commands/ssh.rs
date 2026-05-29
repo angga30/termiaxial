@@ -19,30 +19,24 @@ pub async fn connect_ssh(
     on_data: Channel<Vec<u8>>,
     state: State<'_, SessionManager>,
 ) -> Result<(), String> {
-    println!(
-        "[SSH DEBUG] IPC Command: connect_ssh id={} to {}",
-        session_id, options.host
-    );
+    tracing::debug!("IPC Command: connect_ssh id={} to {}", session_id, options.host);
     let addr = format!("{}:{}", options.host, options.port);
     let (session, mut channel, mut cmd_rx) =
         SshSession::connect(addr, options.user, options.password, options.private_key)
             .await
             .map_err(|e| {
-                println!("[SSH DEBUG] Connection Error: {}", e);
+                tracing::error!("Connection error: {}", e);
                 e.to_string()
             })?;
 
     let handle = session.handle.clone();
     state.sessions.insert(session_id.clone(), session);
-    println!("[SSH DEBUG] Session registered with ID: {}", session_id);
+    tracing::info!("Session registered with ID: {}", session_id);
 
     // Spawn a task to manage the session
     let sid_for_task = session_id.clone();
     tokio::spawn(async move {
-        println!(
-            "[SSH DEBUG] Starting background loop for session {}",
-            sid_for_task
-        );
+        tracing::debug!("Starting background loop for session {}", sid_for_task);
         loop {
             select! {
                 // Handle incoming SSH data
@@ -50,18 +44,18 @@ pub async fn connect_ssh(
                     match msg {
                         Some(ChannelMsg::Data { data }) => {
                             if let Err(e) = on_data.send(data.to_vec()) {
-                                println!("[SSH DEBUG] Channel send error: {}", e);
+                                tracing::error!("Channel send error: {}", e);
                                 break;
                             }
                         }
                         Some(ChannelMsg::ExtendedData { data, .. }) => {
                             if let Err(e) = on_data.send(data.to_vec()) {
-                                println!("[SSH DEBUG] Channel ext-send error: {}", e);
+                                tracing::error!("Channel ext-send error: {}", e);
                                 break;
                             }
                         }
                         Some(ChannelMsg::Eof) | Some(ChannelMsg::Close { .. }) | None => {
-                            println!("[SSH DEBUG] Channel closed or EOF received.");
+                            tracing::debug!("Channel closed or EOF received");
                             break;
                         }
                         _ => {}
@@ -71,20 +65,20 @@ pub async fn connect_ssh(
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(SshCommand::Write(data)) => {
-                            println!("[SSH DEBUG] Writing {} bytes to SSH", data.len());
+                            tracing::debug!("Writing {} bytes to SSH", data.len());
                             if let Err(e) = channel.data(data.as_slice()).await {
-                                println!("[SSH DEBUG] Write Error: {:?}", e);
+                                tracing::error!("Write error: {:?}", e);
                                 break;
                             }
                         }
                         Some(SshCommand::Resize(cols, rows)) => {
-                            println!("[SSH DEBUG] Resizing PTY to {}x{}", cols, rows);
+                            tracing::debug!("Resizing PTY to {}x{}", cols, rows);
                             if let Err(e) = channel.window_change(cols, rows, 0, 0).await {
-                                println!("[SSH DEBUG] Resize Error: {:?}", e);
+                                tracing::error!("Resize error: {:?}", e);
                             }
                         }
                         Some(SshCommand::Disconnect) | None => {
-                            println!("[SSH DEBUG] Disconnect command received.");
+                            tracing::debug!("Disconnect command received");
                             break;
                         }
                     }
@@ -92,16 +86,13 @@ pub async fn connect_ssh(
                 // Periodic check
                 _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     if handle.is_closed() {
-                        println!("[SSH DEBUG] Connection closed detected by keep-alive loop.");
+                        tracing::debug!("Connection closed detected by keep-alive loop");
                         break;
                     }
                 }
             }
         }
-        println!(
-            "[SSH DEBUG] Background loop terminated for session {}",
-            sid_for_task
-        );
+        tracing::debug!("Background loop terminated for session {}", sid_for_task);
     });
 
     Ok(())
@@ -112,16 +103,10 @@ pub async fn disconnect_ssh(
     session_id: String,
     state: State<'_, SessionManager>,
 ) -> Result<(), String> {
-    println!(
-        "[SSH DEBUG] IPC Command: disconnect_ssh for session {}",
-        session_id
-    );
+    tracing::debug!("IPC Command: disconnect_ssh for session {}", session_id);
     if let Some((_, session)) = state.sessions.remove(&session_id) {
         let _ = session.cmd_tx.send(SshCommand::Disconnect);
-        println!(
-            "[SSH DEBUG] Disconnect signal sent to session {}",
-            session_id
-        );
+    tracing::debug!("Disconnect signal sent to session {}", session_id);
         Ok(())
     } else {
         Err("Session not found".to_string())
