@@ -4,7 +4,7 @@ use crate::ssh::{SshCommand, SshSession};
 use dashmap::DashMap;
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
-use tauri::{ipc::Channel, State};
+use tauri::{AppHandle, Emitter, Manager, ipc::Channel, State};
 use tokio::select;
 use uuid::Uuid;
 
@@ -18,6 +18,7 @@ pub async fn connect_ssh(
     options: ConnectionOptions,
     on_data: Channel<Vec<u8>>,
     state: State<'_, SessionManager>,
+    app: AppHandle,
 ) -> Result<(), TmaxError> {
     tracing::debug!("IPC Command: connect_ssh id={} to {}", session_id, options.host);
     let addr = format!("{}:{}", options.host, options.port);
@@ -90,6 +91,11 @@ pub async fn connect_ssh(
             }
         }
         tracing::debug!("Background loop terminated for session {}", sid_for_task);
+        if let Some(manager) = app.try_state::<SessionManager>() {
+            manager.sessions.remove(&sid_for_task);
+            tracing::info!("Session {} cleaned up from session map", sid_for_task);
+        }
+        let _ = app.emit("ssh-disconnected", &sid_for_task);
     });
 
     Ok(())
