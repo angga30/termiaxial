@@ -1,4 +1,4 @@
-use crate::domain::models::{CommandHistoryEntry, Credential};
+use crate::domain::models::{CommandHistoryEntry, Credential, Snippet};
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -85,6 +85,15 @@ impl DbManager {
             )"),
             (3, "CREATE INDEX IF NOT EXISTS idx_history_session ON command_history(session_id)"),
             (4, "CREATE INDEX IF NOT EXISTS idx_history_timestamp ON command_history(timestamp)"),
+            (5, "CREATE TABLE IF NOT EXISTS snippets (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '[]',
+                host_id TEXT,
+                created_at TEXT NOT NULL
+            )"),
         ];
 
         for (version, sql) in migrations {
@@ -162,6 +171,75 @@ impl DbManager {
                 cred.secret,
                 cred.workspace_id,
                 cred.id
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn add_snippet(&self, snippet: &Snippet) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&snippet.tags).unwrap_or("[]".to_string());
+        conn.execute(
+            "INSERT INTO snippets (id, name, command, description, tags, host_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                snippet.id,
+                snippet.name,
+                snippet.command,
+                snippet.description,
+                tags_json,
+                snippet.host_id,
+                snippet.created_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_snippets(&self) -> Result<Vec<Snippet>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, command, description, tags, host_id, created_at FROM snippets",
+        )?;
+        let snippet_iter = stmt.query_map([], |row| {
+            let tags_str: String = row.get(4)?;
+            let tags: Vec<String> =
+                serde_json::from_str(&tags_str).unwrap_or_default();
+            Ok(Snippet {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                command: row.get(2)?,
+                description: row.get(3)?,
+                tags,
+                host_id: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+
+        let mut results = Vec::new();
+        for snippet in snippet_iter {
+            results.push(snippet?);
+        }
+        Ok(results)
+    }
+
+    pub fn delete_snippet(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn update_snippet(&self, snippet: &Snippet) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&snippet.tags).unwrap_or("[]".to_string());
+        conn.execute(
+            "UPDATE snippets SET name = ?1, command = ?2, description = ?3, tags = ?4, host_id = ?5 WHERE id = ?6",
+            params![
+                snippet.name,
+                snippet.command,
+                snippet.description,
+                tags_json,
+                snippet.host_id,
+                snippet.id
             ],
         )?;
         Ok(())

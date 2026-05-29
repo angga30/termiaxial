@@ -13,6 +13,7 @@ use crate::commands::sftp::{
 use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
 use crate::domain::events::EventBus;
 use crate::commands::import::{import_detect_sources, import_keys, import_ssh_config, import_termius};
+use crate::commands::snippet::{snippet_add, snippet_delete, snippet_list, snippet_search, snippet_update};
 use crate::commands::vault::{
     vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata, vault_list_credentials,
     vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
@@ -73,6 +74,11 @@ pub fn run() {
             import_ssh_config,
             import_keys,
             import_termius,
+            snippet_add,
+            snippet_list,
+            snippet_delete,
+            snippet_update,
+            snippet_search,
             history_record,
             history_list,
             history_search,
