@@ -1,4 +1,5 @@
 use crate::domain::error::TmaxError;
+use crate::domain::events::{EventBus, SessionEvent};
 use crate::domain::models::ConnectionOptions;
 use crate::ssh::{SshCommand, SshSession};
 use dashmap::DashMap;
@@ -33,6 +34,13 @@ pub async fn connect_ssh(
     let handle = session.handle.clone();
     state.sessions.insert(session_id.clone(), session);
     tracing::info!("Session registered with ID: {}", session_id);
+
+    let event_bus = app.state::<EventBus>();
+    event_bus.publish(SessionEvent::Connected {
+        session_id: session_id.clone(),
+        host: options.host.clone(),
+    });
+    tracing::debug!("Published Connected event for session {}", session_id);
 
     let sid_for_task = session_id.clone();
     tokio::spawn(async move {
@@ -91,6 +99,13 @@ pub async fn connect_ssh(
             }
         }
         tracing::debug!("Background loop terminated for session {}", sid_for_task);
+        if let Some(event_bus) = app.try_state::<EventBus>() {
+            event_bus.publish(SessionEvent::Disconnected {
+                session_id: sid_for_task.clone(),
+                reason: "Connection closed".to_string(),
+            });
+            tracing::debug!("Published Disconnected event for session {}", sid_for_task);
+        }
         if let Some(manager) = app.try_state::<SessionManager>() {
             manager.sessions.remove(&sid_for_task);
             tracing::info!("Session {} cleaned up from session map", sid_for_task);
