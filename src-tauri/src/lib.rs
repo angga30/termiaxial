@@ -1,5 +1,6 @@
 mod commands;
 mod domain;
+mod infrastructure;
 mod ssh;
 mod vault;
 
@@ -28,6 +29,7 @@ pub fn run() {
         })
         .manage(VaultState(RwLock::new(None)))
         .setup(|app| {
+            crate::infrastructure::logging::init();
             let app_data_dir = app.path().app_data_dir()?;
             if !app_data_dir.exists() {
                 std::fs::create_dir_all(&app_data_dir)?;

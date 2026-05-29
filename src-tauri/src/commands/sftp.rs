@@ -19,15 +19,15 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 #[tauri::command]
 pub async fn sftp_get_home_dir(app: AppHandle) -> Result<String, String> {
-    println!("[SFTP DEBUG] Fetching local home directory");
+    tracing::debug!("Fetching local home directory");
     match app.path().home_dir() {
         Ok(path) => {
             let path_str = path.to_string_lossy().to_string();
-            println!("[SFTP DEBUG] Local home directory: {}", path_str);
+            tracing::debug!("Local home directory: {}", path_str);
             Ok(path_str)
         }
         Err(e) => {
-            println!("[SFTP DEBUG] Failed to get home directory: {:?}", e);
+            tracing::error!("Failed to get home directory: {:?}", e);
             Err("Could not find home directory".to_string())
         }
     }
@@ -35,9 +35,9 @@ pub async fn sftp_get_home_dir(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn sftp_list_local_dir(path: String) -> Result<Vec<SftpEntry>, String> {
-    println!("[SFTP DEBUG] Listing local directory: {}", path);
+    tracing::debug!("Listing local directory: {}", path);
     let entries = std::fs::read_dir(&path).map_err(|e| {
-        println!("[SFTP DEBUG] Local read_dir error: {:?}", e);
+        tracing::error!("Local read_dir error: {:?}", e);
         e.to_string()
     })?;
     let mut result = Vec::new();
@@ -60,10 +60,7 @@ pub async fn sftp_list_local_dir(path: String) -> Result<Vec<SftpEntry>, String>
         }
     }
 
-    println!(
-        "[SFTP DEBUG] Local directory listed: {} items",
-        result.len()
-    );
+    tracing::debug!("Local directory listed: {} items", result.len());
 
     // Sort directories first, then alphabetical
     result.sort_by(|a, b| {
@@ -83,33 +80,30 @@ pub async fn sftp_list_dir(
     path: String,
     state: State<'_, SessionManager>,
 ) -> Result<Vec<SftpEntry>, String> {
-    println!(
-        "[SFTP DEBUG] Listing remote directory: {} for session {}",
-        path, session_id
-    );
+    tracing::debug!("Listing remote directory: {} for session {}", path, session_id);
     let path = if path.is_empty() { "/" } else { &path };
     if let Some(session) = state.sessions.get(&session_id) {
-        println!("[SFTP DEBUG] Opening new channel for SFTP subsystem");
+        tracing::debug!("Opening new channel for SFTP subsystem");
         let channel = session.handle.channel_open_session().await.map_err(|e| {
-            println!("[SFTP DEBUG] Failed to open channel: {:?}", e);
+            tracing::error!("Failed to open channel: {:?}", e);
             format!("Failed to open channel: {:?}", e)
         })?;
 
-        println!("[SFTP DEBUG] Requesting SFTP subsystem");
+        tracing::debug!("Requesting SFTP subsystem");
         channel.request_subsystem(true, "sftp").await.map_err(|e| {
-            println!("[SFTP DEBUG] Failed to request sftp subsystem: {:?}", e);
+            tracing::error!("Failed to request sftp subsystem: {:?}", e);
             format!("Failed to request sftp subsystem: {:?}", e)
         })?;
 
-        println!("[SFTP DEBUG] Initializing SFTP session over stream");
+        tracing::debug!("Initializing SFTP session over stream");
         let sftp = SftpSession::new(channel.into_stream()).await.map_err(|e| {
-            println!("[SFTP DEBUG] Failed to create sftp session: {:?}", e);
+            tracing::error!("Failed to create sftp session: {:?}", e);
             format!("Failed to create sftp session: {:?}", e)
         })?;
 
-        println!("[SFTP DEBUG] Reading remote directory contents");
+        tracing::debug!("Reading remote directory contents");
         let entries = sftp.read_dir(path).await.map_err(|e| {
-            println!("[SFTP DEBUG] Failed to read remote dir: {:?}", e);
+            tracing::error!("Failed to read remote dir: {:?}", e);
             format!("Failed to read dir: {:?}", e)
         })?;
 
@@ -127,13 +121,10 @@ pub async fn sftp_list_dir(
             });
         }
 
-        println!(
-            "[SFTP DEBUG] Remote directory listed: {} items",
-            result.len()
-        );
+        tracing::debug!("Remote directory listed: {} items", result.len());
         Ok(result)
     } else {
-        println!("[SFTP DEBUG] Session not found: {}", session_id);
+        tracing::error!("Session not found: {}", session_id);
         Err("Session not found".to_string())
     }
 }

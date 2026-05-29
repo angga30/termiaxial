@@ -35,10 +35,7 @@ struct OpenAIRequestBody {
 
 #[tauri::command]
 pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
-    println!(
-        "[AI DEBUG] Starting analysis with provider: {} and model: {}",
-        request.provider, request.model
-    );
+    tracing::debug!("Starting analysis with provider: {} and model: {}", request.provider, request.model);
     let client = Client::new();
 
     let prompt = format!(
@@ -55,17 +52,14 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
 
             // Auto-append standard path if using a custom endpoint and it's missing
             if request.provider == "openai-compatible" && !endpoint.ends_with("/chat/completions") {
-                println!("[AI DEBUG] Suffix /chat/completions missing, appending automatically");
+                tracing::debug!("Suffix /chat/completions missing, appending automatically");
                 if !endpoint.ends_with('/') {
                     endpoint.push('/');
                 }
                 endpoint.push_str("chat/completions");
             }
 
-            println!(
-                "[AI DEBUG] Sending request to OpenAI-compatible endpoint: {}",
-                endpoint
-            );
+            tracing::debug!("Sending request to OpenAI-compatible endpoint: {}", endpoint);
 
             let body = OpenAIRequestBody {
                 model: request.model,
@@ -78,39 +72,33 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
             let mut req = client.post(endpoint).json(&body);
 
             if let Some(key) = request.api_key {
-                println!(
-                    "[AI DEBUG] Using provided API key (starts with: {})",
-                    &key[..std::cmp::min(key.len(), 5)]
-                );
+                tracing::debug!("Using provided API key (starts with: {})", &key[..std::cmp::min(key.len(), 5)]);
                 req = req.header("Authorization", format!("Bearer {}", key));
             } else {
-                println!("[AI DEBUG] Warning: No API key provided for OpenAI-compatible provider");
+                tracing::warn!("No API key provided for OpenAI-compatible provider");
             }
 
             let resp = req.send().await.map_err(|e| {
                 let err = format!("Request failed: {}", e);
-                println!("[AI DEBUG] {}", err);
+                tracing::error!("{}", err);
                 err
             })?;
 
-            println!(
-                "[AI DEBUG] Received response with status: {}",
-                resp.status()
-            );
+            tracing::debug!("Received response with status: {}", resp.status());
 
             if !resp.status().is_success() {
                 let err_text = resp.text().await.unwrap_or_default();
-                println!("[AI DEBUG] API Error details: {}", err_text);
+                tracing::error!("API Error details: {}", err_text);
                 return Err(format!("API Error: {}", err_text));
             }
 
             let data: OpenAIResponse = resp.json().await.map_err(|e| {
                 let err = format!("Failed to parse response: {}", e);
-                println!("[AI DEBUG] {}", err);
+                tracing::error!("{}", err);
                 err
             })?;
 
-            println!("[AI DEBUG] Analysis successful");
+            tracing::info!("Analysis successful");
             Ok(data
                 .choices
                 .get(0)
@@ -122,10 +110,7 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
                 .custom_endpoint
                 .clone()
                 .unwrap_or_else(|| "http://localhost:11434/api/generate".to_string());
-            println!(
-                "[AI DEBUG] Sending request to Ollama endpoint: {}",
-                endpoint
-            );
+            tracing::debug!("Sending request to Ollama endpoint: {}", endpoint);
 
             #[derive(Serialize)]
             struct OllamaRequest {
@@ -152,29 +137,23 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, String> {
                 .await
                 .map_err(|e| {
                     let err = format!("Ollama request failed: {}", e);
-                    println!("[AI DEBUG] {}", err);
+                    tracing::error!("{}", err);
                     err
                 })?;
 
-            println!(
-                "[AI DEBUG] Received Ollama response with status: {}",
-                resp.status()
-            );
+            tracing::debug!("Received Ollama response with status: {}", resp.status());
 
             let data: OllamaResponse = resp.json().await.map_err(|e| {
                 let err = format!("Failed to parse Ollama response: {}", e);
-                println!("[AI DEBUG] {}", err);
+                tracing::error!("{}", err);
                 err
             })?;
 
-            println!("[AI DEBUG] Ollama analysis successful");
+            tracing::info!("Ollama analysis successful");
             Ok(data.response)
         }
         _ => {
-            println!(
-                "[AI DEBUG] Error: Unsupported provider: {}",
-                request.provider
-            );
+            tracing::error!("Unsupported provider: {}", request.provider);
             Err("Unsupported provider".to_string())
         }
     }
