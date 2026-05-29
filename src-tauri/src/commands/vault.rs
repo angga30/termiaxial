@@ -11,7 +11,7 @@ pub async fn vault_status(
 ) -> Result<VaultStatus, String> {
     let salt = db.get_metadata("vault_salt").map_err(|e| e.to_string())?;
     let initialized = salt.is_some();
-    let locked = state.0.read().unwrap().is_none();
+    let locked = state.0.read().await.is_none();
 
     Ok(VaultStatus {
         initialized,
@@ -53,7 +53,7 @@ pub async fn vault_setup(
         .map_err(|e| e.to_string())?;
 
     // Store key in memory
-    *state.0.write().unwrap() = Some(key);
+    *state.0.write().await = Some(key);
 
     Ok(())
 }
@@ -90,14 +90,14 @@ pub async fn vault_unlock(
     }
 
     // Store key in memory
-    *state.0.write().unwrap() = Some(key);
+    *state.0.write().await = Some(key);
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn vault_lock(state: State<'_, VaultState>) -> Result<(), String> {
-    *state.0.write().unwrap() = None;
+    *state.0.write().await = None;
     Ok(())
 }
 
@@ -109,7 +109,7 @@ pub async fn vault_add_credential(
 ) -> Result<(), String> {
     println!("Backend: Adding credential: {:?}", cred);
 
-    let key_lock = state.0.read().unwrap();
+    let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
 
     if let Some(secret) = cred.secret {
@@ -134,7 +134,7 @@ pub async fn vault_delete_credential(
     println!("Backend: Deleting credential: {}", id);
 
     // Safety check: ensure vault is unlocked (though delete doesn't need the key)
-    if state.0.read().unwrap().is_none() {
+    if state.0.read().await.is_none() {
         return Err("Vault is locked".to_string());
     }
 
@@ -149,7 +149,7 @@ pub async fn vault_update_credential(
 ) -> Result<(), String> {
     println!("Backend: Updating credential: {:?}", cred);
 
-    let key_lock = state.0.read().unwrap();
+    let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
 
     if let Some(secret) = cred.secret {
@@ -168,7 +168,7 @@ pub async fn vault_list_credentials(
 ) -> Result<Vec<Credential>, String> {
     println!("Backend: Listing credentials");
 
-    let key_lock = state.0.read().unwrap();
+    let key_lock = state.0.read().await;
     let key = key_lock.as_ref().ok_or("Vault is locked")?;
 
     let mut creds = db.list_credentials().map_err(|e| {
@@ -218,7 +218,7 @@ pub async fn vault_create_workspace(
     state: State<'_, VaultState>,
 ) -> Result<(), String> {
     // Safety check: ensure vault is unlocked
-    if state.0.read().unwrap().is_none() {
+    if state.0.read().await.is_none() {
         return Err("Vault is locked".to_string());
     }
 
@@ -232,7 +232,7 @@ pub async fn vault_list_workspaces(
     state: State<'_, VaultState>,
 ) -> Result<Vec<Workspace>, String> {
     // Safety check: ensure vault is unlocked
-    if state.0.read().unwrap().is_none() {
+    if state.0.read().await.is_none() {
         return Err("Vault is locked".to_string());
     }
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 pub struct DbManager {
-    pub conn: Mutex<Connection>,
+    pub conn: Mutex<Connection>, // std::sync::Mutex required: rusqlite::Connection is !Send, so tokio::sync::Mutex won't compile
 }
 
 impl DbManager {
