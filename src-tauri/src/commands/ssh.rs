@@ -1,6 +1,6 @@
+use crate::domain::error::TmaxError;
 use crate::domain::models::ConnectionOptions;
 use crate::ssh::{SshCommand, SshSession};
-use anyhow::Result;
 use dashmap::DashMap;
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub async fn connect_ssh(
     options: ConnectionOptions,
     on_data: Channel<Vec<u8>>,
     state: State<'_, SessionManager>,
-) -> Result<(), String> {
+) -> Result<(), TmaxError> {
     tracing::debug!("IPC Command: connect_ssh id={} to {}", session_id, options.host);
     let addr = format!("{}:{}", options.host, options.port);
     let (session, mut channel, mut cmd_rx) =
@@ -26,20 +26,18 @@ pub async fn connect_ssh(
             .await
             .map_err(|e| {
                 tracing::error!("Connection error: {}", e);
-                e.to_string()
+                TmaxError::Ssh(e.to_string())
             })?;
 
     let handle = session.handle.clone();
     state.sessions.insert(session_id.clone(), session);
     tracing::info!("Session registered with ID: {}", session_id);
 
-    // Spawn a task to manage the session
     let sid_for_task = session_id.clone();
     tokio::spawn(async move {
         tracing::debug!("Starting background loop for session {}", sid_for_task);
         loop {
             select! {
-                // Handle incoming SSH data
                 msg = channel.wait() => {
                     match msg {
                         Some(ChannelMsg::Data { data }) => {
@@ -61,7 +59,6 @@ pub async fn connect_ssh(
                         _ => {}
                     }
                 }
-                // Handle local commands
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(SshCommand::Write(data)) => {
@@ -83,7 +80,6 @@ pub async fn connect_ssh(
                         }
                     }
                 }
-                // Periodic check
                 _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     if handle.is_closed() {
                         tracing::debug!("Connection closed detected by keep-alive loop");
@@ -102,14 +98,14 @@ pub async fn connect_ssh(
 pub async fn disconnect_ssh(
     session_id: String,
     state: State<'_, SessionManager>,
-) -> Result<(), String> {
+) -> Result<(), TmaxError> {
     tracing::debug!("IPC Command: disconnect_ssh for session {}", session_id);
     if let Some((_, session)) = state.sessions.remove(&session_id) {
         let _ = session.cmd_tx.send(SshCommand::Disconnect);
     tracing::debug!("Disconnect signal sent to session {}", session_id);
         Ok(())
     } else {
-        Err("Session not found".to_string())
+        Err(TmaxError::Ssh("Session not found".to_string()))
     }
 }
 
@@ -118,15 +114,15 @@ pub async fn write_ssh(
     session_id: String,
     data: Vec<u8>,
     state: State<'_, SessionManager>,
-) -> Result<(), String> {
+) -> Result<(), TmaxError> {
     if let Some(session) = state.sessions.get(&session_id) {
         session
             .cmd_tx
             .send(SshCommand::Write(data))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| TmaxError::Ssh(e.to_string()))?;
         Ok(())
     } else {
-        Err("Session not found".to_string())
+        Err(TmaxError::Ssh("Session not found".to_string()))
     }
 }
 
@@ -136,14 +132,14 @@ pub async fn resize_pty(
     cols: u32,
     rows: u32,
     state: State<'_, SessionManager>,
-) -> Result<(), String> {
+) -> Result<(), TmaxError> {
     if let Some(session) = state.sessions.get(&session_id) {
         session
             .cmd_tx
             .send(SshCommand::Resize(cols, rows))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| TmaxError::Ssh(e.to_string()))?;
         Ok(())
     } else {
-        Err("Session not found".to_string())
+        Err(TmaxError::Ssh("Session not found".to_string()))
     }
 }
