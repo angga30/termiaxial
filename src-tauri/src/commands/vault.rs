@@ -1,32 +1,8 @@
+use crate::domain::models::{Credential, VaultStatus, Workspace};
 use crate::vault::{self, crypto, DbManager, VaultState};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tauri::State;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Credential {
-    pub id: String,
-    pub name: String,
-    pub r#type: String,
-    pub host: Option<String>,
-    pub user: Option<String>,
-    pub secret: Option<Vec<u8>>,
-    pub added_at: String,
-    pub workspace_id: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Workspace {
-    pub id: String,
-    pub name: String,
-    pub created_at: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct VaultStatus {
-    pub initialized: bool,
-    pub locked: bool,
-}
 
 #[tauri::command]
 pub async fn vault_status(
