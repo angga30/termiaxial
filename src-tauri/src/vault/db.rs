@@ -1,4 +1,4 @@
-use crate::domain::models::Credential;
+use crate::domain::models::{CommandHistoryEntry, Credential};
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -76,6 +76,15 @@ impl DbManager {
 
         let migrations: Vec<(i32, &str)> = vec![
             (1, "ALTER TABLE credentials ADD COLUMN workspace_id TEXT"),
+            (2, "CREATE TABLE IF NOT EXISTS command_history (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                command TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                exit_code INTEGER
+            )"),
+            (3, "CREATE INDEX IF NOT EXISTS idx_history_session ON command_history(session_id)"),
+            (4, "CREATE INDEX IF NOT EXISTS idx_history_timestamp ON command_history(timestamp)"),
         ];
 
         for (version, sql) in migrations {
@@ -201,5 +210,84 @@ impl DbManager {
             results.push(ws?);
         }
         Ok(results)
+    }
+
+    pub fn record_command(&self, entry: &CommandHistoryEntry) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO command_history (id, session_id, command, timestamp, exit_code)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![entry.id, entry.session_id, entry.command, entry.timestamp, entry.exit_code],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_history(&self, session_id: Option<&str>, limit: Option<usize>) -> Result<Vec<CommandHistoryEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let limit_val = limit.unwrap_or(100);
+        let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match session_id {
+            Some(sid) => (
+                format!("SELECT id, session_id, command, timestamp, exit_code FROM command_history WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT {}", limit_val),
+                vec![Box::new(sid.to_string())],
+            ),
+            None => (
+                format!("SELECT id, session_id, command, timestamp, exit_code FROM command_history ORDER BY timestamp DESC LIMIT {}", limit_val),
+                vec![],
+            ),
+        };
+        let mut stmt = conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let entry_iter = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok(CommandHistoryEntry {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                command: row.get(2)?,
+                timestamp: row.get(3)?,
+                exit_code: row.get(4)?,
+            })
+        })?;
+        let mut results = Vec::new();
+        for entry in entry_iter {
+            results.push(entry?);
+        }
+        Ok(results)
+    }
+
+    pub fn search_history(&self, query: &str, limit: Option<usize>) -> Result<Vec<CommandHistoryEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let limit_val = limit.unwrap_or(50);
+        let pattern = format!("%{}%", query);
+        let sql = format!(
+            "SELECT id, session_id, command, timestamp, exit_code FROM command_history WHERE command LIKE ?1 ORDER BY timestamp DESC LIMIT {}",
+            limit_val
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let entry_iter = stmt.query_map(params![pattern], |row| {
+            Ok(CommandHistoryEntry {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                command: row.get(2)?,
+                timestamp: row.get(3)?,
+                exit_code: row.get(4)?,
+            })
+        })?;
+        let mut results = Vec::new();
+        for entry in entry_iter {
+            results.push(entry?);
+        }
+        Ok(results)
+    }
+
+    pub fn clear_history(&self, session_id: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        match session_id {
+            Some(sid) => {
+                conn.execute("DELETE FROM command_history WHERE session_id = ?1", params![sid])?;
+            }
+            None => {
+                conn.execute("DELETE FROM command_history", [])?;
+            }
+        }
+        Ok(())
     }
 }
