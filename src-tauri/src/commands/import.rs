@@ -1,6 +1,9 @@
 use crate::domain::error::TmaxError;
+use crate::domain::models::Credential;
+use crate::vault::{crypto, DbManager, VaultState};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SshConfigEntry {
@@ -310,6 +313,107 @@ pub async fn import_keys() -> Result<Vec<SshKeyInfo>, TmaxError> {
     let keys = scan_ssh_keys();
     tracing::info!("Found {} SSH keys", keys.len());
     Ok(keys)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ImportSelection {
+    pub ssh_config_entries: Vec<SshConfigEntry>,
+    pub import_keys: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub errors: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn import_selected(
+    selection: ImportSelection,
+    db: State<'_, DbManager>,
+    vault_state: State<'_, VaultState>,
+) -> Result<ImportResult, TmaxError> {
+    tracing::info!(
+        "Starting import of {} SSH config entries",
+        selection.ssh_config_entries.len()
+    );
+
+    if vault_state.0.read().await.is_none() {
+        return Err(TmaxError::Vault("Vault is locked".to_string()));
+    }
+
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = Vec::new();
+    let key_lock = vault_state.0.read().await;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
+
+    for entry in &selection.ssh_config_entries {
+        let host = entry.host_name.as_ref().unwrap_or(&entry.host);
+        let user = entry.user.clone().unwrap_or_default();
+        let port = entry.port.unwrap_or(22);
+        let name = if user.is_empty() {
+            entry.host.clone()
+        } else {
+            format!("{}@{}:{}", user, host, port)
+        };
+
+        let secret = if let Some(key_path) = &entry.identity_file {
+            Some(key_path.as_bytes().to_vec())
+        } else {
+            None
+        };
+
+        let mut cred = Credential {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            r#type: "ssh".to_string(),
+            host: Some(format!("{}:{}", host, port)),
+            user: Some(user),
+            secret,
+            added_at: format!(
+                "{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            ),
+            workspace_id: None,
+        };
+
+        if let Some(secret_bytes) = cred.secret {
+            match crypto::encrypt(&secret_bytes, key) {
+                Ok(encrypted) => cred.secret = Some(encrypted),
+                Err(e) => {
+                    errors.push(format!("{}: encryption failed: {}", entry.host, e));
+                    skipped += 1;
+                    continue;
+                }
+            }
+        }
+
+        match db.add_credential(&cred) {
+            Ok(_) => imported += 1,
+            Err(e) => {
+                errors.push(format!("{}: db error: {}", entry.host, e));
+                skipped += 1;
+            }
+        }
+    }
+
+    tracing::info!(
+        "Import complete: {} imported, {} skipped",
+        imported,
+        skipped
+    );
+    Ok(ImportResult {
+        imported,
+        skipped,
+        errors,
+    })
 }
 
 #[tauri::command]
