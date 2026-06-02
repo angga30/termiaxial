@@ -46,16 +46,8 @@ pub async fn snippet_search(
     query: String,
     db: State<'_, DbManager>,
 ) -> Result<Vec<Snippet>, TmaxError> {
-    tracing::debug!("Searching snippets: {}", query);
+    tracing::debug!("Fuzzy searching snippets: {}", query);
     let all = db.list_snippets()?;
-    let q = query.to_lowercase();
-    let results: Vec<Snippet> = all
-        .into_iter()
-        .filter(|s| {
-            s.name.to_lowercase().contains(&q)
-                || s.command.to_lowercase().contains(&q)
-                || s.tags.iter().any(|t| t.to_lowercase().contains(&q))
-        })
-        .collect();
-    Ok(results)
+    let results = crate::commands::fuzzy::fuzzy_search_snippets(&query, &all);
+    Ok(results.into_iter().map(|(_, s)| s.clone()).collect())
 }

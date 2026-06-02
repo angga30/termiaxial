@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod fuzzy;
 pub mod history;
 pub mod import;
 pub mod sftp;
