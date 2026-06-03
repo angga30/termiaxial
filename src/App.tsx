@@ -7,6 +7,7 @@ import { AIChatModal } from "./components/ai/AIChatModal";
 import { VaultAuth } from "./components/vault/VaultAuth";
 import { CredentialsView } from "./components/vault/CredentialsView";
 import { HistoryPanel } from "./components/history/HistoryPanel";
+import { SnippetPalette } from "./components/snippet/SnippetPalette";
 import { useState, useEffect, useCallback } from "react";
 import { useVaultStore, Credential } from "./stores/vault-store";
 import { useTerminalStore } from "./stores/terminal-store";
@@ -33,6 +34,7 @@ function App() {
   );
    const [isVaultCollapsed, setIsVaultCollapsed] = useState(false);
   const [aiContext, setAiContext] = useState<string | null>(null);
+  const [isSnippetPaletteOpen, setIsSnippetPaletteOpen] = useState(false);
 
   const {
     status,
@@ -66,6 +68,17 @@ function App() {
       fetchCredentials();
     }
   }, [status, fetchCredentials]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setIsSnippetPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleConnect = useCallback(
     (options: SshOptions, name: string) => {
@@ -287,6 +300,10 @@ function App() {
 
       {aiContext && (
         <AIChatModal context={aiContext} onClose={() => setAiContext(null)} />
+      )}
+
+      {isSnippetPaletteOpen && (
+        <SnippetPalette onClose={() => setIsSnippetPaletteOpen(false)} />
       )}
 
       <div className="fixed bottom-6 right-6 z-[300] flex flex-col gap-3 w-80 pointer-events-none">
