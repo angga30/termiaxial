@@ -50,13 +50,21 @@ pub async fn connect_ssh(
                 msg = channel.wait() => {
                     match msg {
                         Some(ChannelMsg::Data { data }) => {
-                            if let Err(e) = on_data.send(data.to_vec()) {
+                            let data_vec = data.to_vec();
+                            if let Some(rec_mgr) = app.try_state::<crate::commands::recording::RecordingManager>() {
+                                crate::commands::recording::record_data(rec_mgr.inner(), &sid_for_task, &data_vec);
+                            }
+                            if let Err(e) = on_data.send(data_vec) {
                                 tracing::error!("Channel send error: {}", e);
                                 break;
                             }
                         }
                         Some(ChannelMsg::ExtendedData { data, .. }) => {
-                            if let Err(e) = on_data.send(data.to_vec()) {
+                            let data_vec = data.to_vec();
+                            if let Some(rec_mgr) = app.try_state::<crate::commands::recording::RecordingManager>() {
+                                crate::commands::recording::record_data(rec_mgr.inner(), &sid_for_task, &data_vec);
+                            }
+                            if let Err(e) = on_data.send(data_vec) {
                                 tracing::error!("Channel ext-send error: {}", e);
                                 break;
                             }

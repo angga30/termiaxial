@@ -6,6 +6,7 @@ mod vault;
 
 use crate::commands::ai::ai_analyze;
 use crate::commands::history::{history_clear, history_list, history_record, history_search};
+use crate::commands::recording::{start_recording, stop_recording, recording_status, RecordingManager};
 use crate::commands::sftp::{
     sftp_download, sftp_get_home_dir, sftp_list_dir, sftp_list_local_dir, sftp_transfer_remote,
     sftp_upload,
@@ -32,6 +33,7 @@ pub fn run() {
         .manage(SessionManager {
             sessions: DashMap::new(),
         })
+        .manage(RecordingManager::new())
         .manage(EventBus::new(256))
         .manage(VaultState(RwLock::new(None)))
         .setup(|app| {
@@ -52,6 +54,9 @@ pub fn run() {
             disconnect_ssh,
             write_ssh,
             resize_pty,
+            start_recording,
+            stop_recording,
+            recording_status,
             sftp_list_dir,
             sftp_list_local_dir,
             sftp_get_home_dir,
