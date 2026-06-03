@@ -6,6 +6,7 @@ import {
   FileCode,
   Settings,
   FolderTree,
+  Clock,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -13,7 +14,8 @@ interface SidebarProps {
   onSftpClick?: () => void;
   onSettingsClick?: () => void;
   onCredentialsClick?: () => void;
-  activeView?: "terminal" | "sftp" | "credentials" | "settings";
+  onHistoryClick?: () => void;
+  activeView?: "terminal" | "sftp" | "credentials" | "settings" | "history";
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -21,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSftpClick,
   onSettingsClick,
   onCredentialsClick,
+  onHistoryClick,
   activeView,
 }) => {
   return (
@@ -48,6 +51,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={onCredentialsClick}
       />
       <SidebarItem icon={<Globe size={20} />} title="Connections" />
+      <SidebarItem
+        icon={<Clock size={20} />}
+        title="History"
+        active={activeView === "history"}
+        onClick={onHistoryClick}
+      />
       <SidebarItem icon={<FileCode size={20} />} title="Snippets" />
 
       <div className="flex-1" />

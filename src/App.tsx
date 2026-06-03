@@ -6,6 +6,7 @@ import { Settings } from "./components/settings/Settings";
 import { AIChatModal } from "./components/ai/AIChatModal";
 import { VaultAuth } from "./components/vault/VaultAuth";
 import { CredentialsView } from "./components/vault/CredentialsView";
+import { HistoryPanel } from "./components/history/HistoryPanel";
 import { useState, useEffect, useCallback } from "react";
 import { useVaultStore, Credential } from "./stores/vault-store";
 import { useTerminalStore } from "./stores/terminal-store";
@@ -24,7 +25,7 @@ import { SshOptions } from "./hooks/use-ssh";
 
 function App() {
   const [activeView, setActiveView] = useState<
-    "terminal" | "sftp" | "credentials" | "settings"
+    "terminal" | "sftp" | "credentials" | "settings" | "history"
   >("terminal");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCredential, setEditingCredential] = useState<Credential | null>(
@@ -98,6 +99,7 @@ function App() {
         onSftpClick={() => setActiveView("sftp")}
         onCredentialsClick={() => setActiveView("credentials")}
         onSettingsClick={() => setActiveView("settings")}
+        onHistoryClick={() => setActiveView("history")}
         activeView={activeView}
       />
 
@@ -182,6 +184,12 @@ function App() {
             className={`flex-1 ${activeView === "settings" ? "flex" : "hidden"}`}
           >
             <Settings />
+          </div>
+
+          <div
+            className={`flex-1 ${activeView === "history" ? "flex" : "hidden"}`}
+          >
+            <HistoryPanel />
           </div>
 
           {activeView === "terminal" && (
