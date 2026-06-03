@@ -1,6 +1,10 @@
 use crate::domain::error::TmaxError;
+use crate::domain::models::Credential;
+use crate::vault::{crypto, DbManager, VaultState};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::PathBuf;
+use tauri::State;
 
 const TMAX_MARKER: &str = "# Tmax-managed";
 
@@ -121,6 +125,171 @@ pub async fn ssh_config_sync_status() -> Result<SshConfigSyncStatus, TmaxError> 
         exists,
         last_modified,
         tmax_entries_count,
+    })
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConfigChange {
+    pub host: String,
+    pub host_name: Option<String>,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+    pub change_type: String,
+}
+
+#[tauri::command]
+pub async fn ssh_config_detect_changes(
+    db: State<'_, DbManager>,
+) -> Result<Vec<ConfigChange>, TmaxError> {
+    tracing::info!("Detecting SSH config changes");
+
+    let config_path = default_ssh_config_path();
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| TmaxError::Config(format!("Failed to read SSH config: {}", e)))?;
+
+    let config_entries = crate::commands::import::parse_ssh_config(&content);
+
+    let vault_creds = db.list_credentials()?;
+    let vault_hosts: HashSet<String> = vault_creds
+        .iter()
+        .filter_map(|c| c.host.clone())
+        .collect();
+
+    let mut changes = Vec::new();
+    for entry in &config_entries {
+        let host_key = if let Some(ref hn) = entry.host_name {
+            format!("{}:{}", hn, entry.port.unwrap_or(22))
+        } else {
+            format!("{}:{}", entry.host, entry.port.unwrap_or(22))
+        };
+
+        if !vault_hosts.contains(&host_key) {
+            changes.push(ConfigChange {
+                host: entry.host.clone(),
+                host_name: entry.host_name.clone(),
+                user: entry.user.clone(),
+                port: entry.port,
+                change_type: "new".to_string(),
+            });
+        }
+    }
+
+    tracing::info!("Found {} new entries in SSH config", changes.len());
+    Ok(changes)
+}
+
+#[tauri::command]
+pub async fn ssh_config_sync_from_config(
+    db: State<'_, DbManager>,
+    vault_state: State<'_, VaultState>,
+) -> Result<crate::commands::import::ImportResult, TmaxError> {
+    tracing::info!("Syncing SSH config changes into vault");
+
+    if vault_state.0.read().await.is_none() {
+        return Err(TmaxError::Vault("Vault is locked".to_string()));
+    }
+
+    let config_path = default_ssh_config_path();
+    if !config_path.exists() {
+        return Ok(crate::commands::import::ImportResult {
+            imported: 0,
+            skipped: 0,
+            errors: Vec::new(),
+        });
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| TmaxError::Config(format!("Failed to read SSH config: {}", e)))?;
+
+    let config_entries = crate::commands::import::parse_ssh_config(&content);
+
+    let vault_creds = db.list_credentials()?;
+    let vault_hosts: HashSet<String> = vault_creds
+        .iter()
+        .filter_map(|c| c.host.clone())
+        .collect();
+
+    let key_lock = vault_state.0.read().await;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
+
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = Vec::new();
+
+    for entry in &config_entries {
+        let host = entry.host_name.as_ref().unwrap_or(&entry.host);
+        let user = entry.user.clone().unwrap_or_default();
+        let port = entry.port.unwrap_or(22);
+        let host_key = format!("{}:{}", host, port);
+
+        if vault_hosts.contains(&host_key) {
+            continue;
+        }
+
+        let name = if user.is_empty() {
+            entry.host.clone()
+        } else {
+            format!("{}@{}:{}", user, host, port)
+        };
+
+        let secret = if let Some(key_path) = &entry.identity_file {
+            Some(key_path.as_bytes().to_vec())
+        } else {
+            None
+        };
+
+        let mut cred = Credential {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            r#type: "ssh".to_string(),
+            host: Some(host_key),
+            user: Some(user),
+            secret,
+            added_at: format!(
+                "{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            ),
+            workspace_id: None,
+        };
+
+        if let Some(secret_bytes) = cred.secret {
+            match crypto::encrypt(&secret_bytes, key) {
+                Ok(encrypted) => cred.secret = Some(encrypted),
+                Err(e) => {
+                    errors.push(format!("{}: encryption failed: {}", entry.host, e));
+                    skipped += 1;
+                    continue;
+                }
+            }
+        }
+
+        match db.add_credential(&cred) {
+            Ok(_) => imported += 1,
+            Err(e) => {
+                errors.push(format!("{}: db error: {}", entry.host, e));
+                skipped += 1;
+            }
+        }
+    }
+
+    tracing::info!(
+        "Sync from config complete: {} imported, {} skipped",
+        imported,
+        skipped
+    );
+    Ok(crate::commands::import::ImportResult {
+        imported,
+        skipped,
+        errors,
     })
 }
 
