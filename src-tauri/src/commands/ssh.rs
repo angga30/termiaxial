@@ -5,6 +5,7 @@ use crate::ssh::{SshCommand, SshSession};
 use dashmap::DashMap;
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, ipc::Channel, State};
 use tokio::select;
 use uuid::Uuid;
@@ -43,6 +44,8 @@ pub async fn connect_ssh(
     tracing::debug!("Published Connected event for session {}", session_id);
 
     let sid_for_task = session_id.clone();
+    // Keep a weak reference to detect if this session has been replaced
+    let handle_for_check = Arc::downgrade(&handle);
     tokio::spawn(async move {
         tracing::debug!("Starting background loop for session {}", sid_for_task);
         loop {
@@ -115,8 +118,20 @@ pub async fn connect_ssh(
             tracing::debug!("Published Disconnected event for session {}", sid_for_task);
         }
         if let Some(manager) = app.try_state::<SessionManager>() {
-            manager.sessions.remove(&sid_for_task);
-            tracing::info!("Session {} cleaned up from session map", sid_for_task);
+            // Only remove if this specific session (by handle pointer) is still in the map.
+            // If connect_ssh was called again for the same session_id, the map already holds
+            // a newer session — removing it would orphan the live connection.
+            let still_owns = manager
+                .sessions
+                .get(&sid_for_task)
+                .map(|s| Arc::ptr_eq(&s.handle, &handle_for_check.upgrade().unwrap_or_else(|| s.handle.clone())))
+                .unwrap_or(false);
+            if !still_owns {
+                tracing::info!("Session {} was replaced; skipping cleanup removal", sid_for_task);
+            } else {
+                manager.sessions.remove(&sid_for_task);
+                tracing::info!("Session {} cleaned up from session map", sid_for_task);
+            }
         }
         let _ = app.emit("ssh-disconnected", &sid_for_task);
     });

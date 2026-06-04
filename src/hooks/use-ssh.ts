@@ -25,17 +25,22 @@ export const useSsh = () => {
         sessionIdRef.current = id;
         const channel = new Channel<number[]>();
         channel.onmessage = (message) => {
-          onData(new Uint8Array(message));
+          const bytes = new Uint8Array(message);
+          console.debug(`[SSH] data rx session=${id} bytes=${bytes.length}`, bytes.slice(0, 32));
+          onData(bytes);
         };
 
+        console.log(`[SSH] invoking connect_ssh session=${id} host=${options.host}`);
         await invoke("connect_ssh", {
           sessionId: id,
           options,
           onData: channel,
         });
+        console.log(`[SSH] connect_ssh resolved OK session=${id}`);
         setIsConnected(true);
         return id;
       } catch (err) {
+        console.error(`[SSH] connect_ssh FAILED session=${id}:`, err);
         setError(String(err));
         setIsConnected(false);
         throw err;
@@ -49,6 +54,7 @@ export const useSsh = () => {
     try {
       const bytes =
         typeof data === "string" ? new TextEncoder().encode(data) : data;
+      console.debug(`[SSH] write session=${sessionIdRef.current} bytes=${bytes.length}`);
       await invoke("write_ssh", {
         sessionId: sessionIdRef.current,
         data: Array.from(bytes),
@@ -61,6 +67,7 @@ export const useSsh = () => {
   const resize = useCallback(async (cols: number, rows: number) => {
     if (!sessionIdRef.current) return;
     try {
+      console.debug(`[SSH] resize session=${sessionIdRef.current} ${cols}x${rows}`);
       await invoke("resize_pty", {
         sessionId: sessionIdRef.current,
         cols,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Folder,
   File,
@@ -12,16 +12,45 @@ import {
 import { useSftp, SftpEntry } from "../../hooks/use-sftp";
 import { useTerminalStore } from "../../stores/terminal-store";
 import { useVaultStore } from "../../stores/vault-store";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
+
+// Invisible component: establishes SSH connection for a pure SFTP session (no terminal UI)
+const SftpConnector: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+  const sessions = useTerminalStore((s) => s.sessions);
+  const updateStatus = useTerminalStore((s) => s.updateSessionStatus);
+  const session = sessions.find((s) => s.id === sessionId);
+  const connectedRef = useRef(false);
+
+  useEffect(() => {
+    if (!session || connectedRef.current) return;
+    connectedRef.current = true;
+
+    const channel = new Channel<number[]>();
+    // Discard SSH stdout — SFTP uses its own subsystem channel
+    channel.onmessage = () => {};
+
+    updateStatus(sessionId, "connecting");
+    invoke("connect_ssh", { sessionId, options: session.options, onData: channel })
+      .then(() => updateStatus(sessionId, "connected"))
+      .catch(() => updateStatus(sessionId, "error"));
+  }, [sessionId, session]);
+
+  return null;
+};
 
 export const DualPanelExplorer: React.FC = () => {
   const [leftPath, setLeftPath] = useState("");
   const [rightPath, setRightPath] = useState("");
   const [leftSession, setLeftSession] = useState("local");
   const [rightSession, setRightSession] = useState("local");
+  const sftpSessionMap = useTerminalStore((s) => s.sftpSessionMap);
 
   return (
     <div className="flex-1 flex gap-px bg-white/5 overflow-hidden h-full">
+      {/* Connect all SFTP sessions that don't have a terminal */}
+      {Object.values(sftpSessionMap).map((sid) => (
+        <SftpConnector key={sid} sessionId={sid} />
+      ))}
       <SftpPanel
         id="left"
         selectedSessionId={leftSession}
@@ -64,7 +93,7 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
   otherPanel,
 }) => {
   const sessions = useTerminalStore((state) => state.sessions);
-  const { addSession } = useTerminalStore();
+  const { addSftpSession, sftpSessionMap } = useTerminalStore();
   const { credentials } = useVaultStore();
   const {
     entries,
@@ -79,6 +108,16 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
     new Set(),
   );
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Resolve actual backend session ID from credential ID
+  const resolvedSessionId =
+    selectedSessionId === "local"
+      ? "local"
+      : sftpSessionMap[selectedSessionId] ?? null;
+
+  const sessionStatus = resolvedSessionId
+    ? sessions.find((s) => s.id === resolvedSessionId)?.status
+    : null;
 
   const refresh = useCallback(async () => {
     let path = currentPath;
@@ -97,11 +136,11 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
 
     if (selectedSessionId === "local") {
       listLocalDir(path);
-    } else {
-      listDir(selectedSessionId, path);
+    } else if (resolvedSessionId && sessionStatus === "connected") {
+      listDir(resolvedSessionId, path);
     }
     setSelectedEntries(new Set());
-  }, [selectedSessionId, currentPath, listDir, listLocalDir, setCurrentPath]);
+  }, [selectedSessionId, resolvedSessionId, sessionStatus, currentPath, listDir, listLocalDir, setCurrentPath]);
 
   useEffect(() => {
     refresh();
@@ -181,24 +220,16 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
       const sPath = `${data.sourcePath}${data.sourcePath.endsWith("/") ? "" : "/"}${itemName}`;
       const dPath = `${currentPath}${currentPath.endsWith("/") ? "" : "/"}${itemName}`;
 
+      const srcResolved = data.sourceSessionId === "local" ? "local" : (sftpSessionMap[data.sourceSessionId] ?? null);
+      const dstResolved = resolvedSessionId;
+
       try {
-        if (data.sourceSessionId === "local" && selectedSessionId !== "local") {
-          await upload(selectedSessionId, sPath, dPath);
-        } else if (
-          data.sourceSessionId !== "local" &&
-          selectedSessionId === "local"
-        ) {
-          await download(data.sourceSessionId, sPath, dPath);
-        } else if (
-          data.sourceSessionId !== "local" &&
-          selectedSessionId !== "local"
-        ) {
-          await transferRemote(
-            data.sourceSessionId,
-            sPath,
-            selectedSessionId,
-            dPath,
-          );
+        if (srcResolved === "local" && dstResolved && dstResolved !== "local") {
+          await upload(dstResolved, sPath, dPath);
+        } else if (srcResolved && srcResolved !== "local" && dstResolved === "local") {
+          await download(srcResolved, sPath, dPath);
+        } else if (srcResolved && srcResolved !== "local" && dstResolved && dstResolved !== "local") {
+          await transferRemote(srcResolved, sPath, dstResolved, dPath);
         }
       } catch (err) {
         console.error(`Failed to transfer ${itemName}:`, err);
@@ -219,29 +250,19 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
 
   const handleTransfer = async () => {
     if (selectedEntries.size === 0) return;
+    const otherResolved = otherPanel.sessionId === "local" ? "local" : (sftpSessionMap[otherPanel.sessionId] ?? null);
 
     for (const itemName of selectedEntries) {
       const sPath = `${currentPath}${currentPath.endsWith("/") ? "" : "/"}${itemName}`;
       const dPath = `${otherPanel.path}${otherPanel.path.endsWith("/") ? "" : "/"}${itemName}`;
 
       try {
-        if (selectedSessionId === "local" && otherPanel.sessionId !== "local") {
-          await upload(otherPanel.sessionId, sPath, dPath);
-        } else if (
-          selectedSessionId !== "local" &&
-          otherPanel.sessionId === "local"
-        ) {
-          await download(selectedSessionId, sPath, dPath);
-        } else if (
-          selectedSessionId !== "local" &&
-          otherPanel.sessionId !== "local"
-        ) {
-          await transferRemote(
-            selectedSessionId,
-            sPath,
-            otherPanel.sessionId,
-            dPath,
-          );
+        if (resolvedSessionId === "local" && otherResolved && otherResolved !== "local") {
+          await upload(otherResolved, sPath, dPath);
+        } else if (resolvedSessionId && resolvedSessionId !== "local" && otherResolved === "local") {
+          await download(resolvedSessionId, sPath, dPath);
+        } else if (resolvedSessionId && resolvedSessionId !== "local" && otherResolved && otherResolved !== "local") {
+          await transferRemote(resolvedSessionId, sPath, otherResolved, dPath);
         }
       } catch (err) {
         console.error(`Transfer failed for ${itemName}: `, err);
@@ -261,25 +282,22 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
         <select
           value={selectedSessionId}
           onChange={(e) => {
-            const newSessionId = e.target.value;
-            setSelectedSessionId(newSessionId);
+            const newCredId = e.target.value;
+            setSelectedSessionId(newCredId);
             setCurrentPath("");
-            
-            if (newSessionId !== "local") {
-              const cred = credentials.find((c) => c.id === newSessionId);
-              if (cred && !sessions.find((s) => s.id === cred.id)) {
+
+            if (newCredId !== "local" && !sftpSessionMap[newCredId]) {
+              const cred = credentials.find((c) => c.id === newCredId);
+              if (cred) {
                 const secretStr = cred.secret
                   ? new TextDecoder().decode(new Uint8Array(cred.secret))
                   : undefined;
-                
-                addSession(cred.name, {
+                addSftpSession(newCredId, cred.name, {
                   host: cred.host || "",
                   port: 22,
                   user: cred.user || "",
-                  password:
-                    cred.type === "password" ? secretStr : undefined,
-                  private_key:
-                    cred.type === "ssh" ? secretStr : undefined,
+                  password: cred.type === "password" ? secretStr : undefined,
+                  private_key: cred.type === "ssh" ? secretStr : undefined,
                 });
               }
             }
@@ -311,9 +329,16 @@ const SftpPanel: React.FC<SftpPanelProps> = ({
       </div>
 
       <div className="flex-1 overflow-auto relative">
-        {loading && (
+        {(loading || (selectedSessionId !== "local" && sessionStatus !== "connected")) && (
           <div className="absolute inset-0 flex items-center justify-center bg-bg1/50 backdrop-blur-[2px] z-20">
-            <Loader2 className="animate-spin text-cyan" size={24} />
+            {sessionStatus === "connecting" || sessionStatus === undefined ? (
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Loader2 className="animate-spin text-cyan" size={20} />
+                Connecting…
+              </div>
+            ) : loading ? (
+              <Loader2 className="animate-spin text-cyan" size={24} />
+            ) : null}
           </div>
         )}
 

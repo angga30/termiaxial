@@ -21,6 +21,7 @@ interface SnippetStore {
   loadSnippets: () => Promise<void>;
   searchSnippets: (q: string) => Promise<void>;
   addSnippet: (s: Omit<Snippet, "id" | "created_at">) => Promise<void>;
+  updateSnippet: (s: Snippet) => Promise<void>;
   deleteSnippet: (id: string) => Promise<void>;
 }
 
@@ -55,7 +56,26 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
     }
   },
   addSnippet: async (s) => {
-    await invoke("snippet_add", { snippet: s });
+    const snippet: Snippet = {
+      ...s,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    try {
+      await invoke("snippet_add", { snippet });
+    } catch (err) {
+      console.error("Failed to add snippet:", err);
+      throw err;
+    }
+    get().loadSnippets();
+  },
+  updateSnippet: async (snippet) => {
+    try {
+      await invoke("snippet_update", { snippet });
+    } catch (err) {
+      console.error("Failed to update snippet:", err);
+      throw err;
+    }
     get().loadSnippets();
   },
   deleteSnippet: async (id) => {

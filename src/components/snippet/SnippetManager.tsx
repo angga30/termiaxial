@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Terminal, Tag } from "lucide-react";
-import { useSnippetStore } from "../../stores/snippet-store";
+import { Plus, Trash2, Terminal, Tag, Pencil } from "lucide-react";
+import { useSnippetStore, Snippet } from "../../stores/snippet-store";
 
 export const SnippetManager: React.FC = () => {
-  const { snippets, loadSnippets, addSnippet, deleteSnippet } = useSnippetStore();
+  const { snippets, loadSnippets, addSnippet, updateSnippet, deleteSnippet } = useSnippetStore();
   const [showForm, setShowForm] = useState(false);
+  const [editingSnippet, setEditingSnippet] = useState<Snippet | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -18,20 +19,34 @@ export const SnippetManager: React.FC = () => {
     loadSnippets();
   }, [loadSnippets]);
 
+  const openAdd = () => {
+    setEditingSnippet(null);
+    setFormData({ name: "", command: "", description: "", tags: "", host_id: null });
+    setShowForm(true);
+  };
+
+  const openEdit = (snippet: Snippet) => {
+    setEditingSnippet(snippet);
+    setFormData({
+      name: snippet.name,
+      command: snippet.command,
+      description: snippet.description,
+      tags: snippet.tags.join(", "),
+      host_id: snippet.host_id,
+    });
+    setShowForm(true);
+  };
+
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.command.trim()) return;
-    await addSnippet({
-      name: formData.name.trim(),
-      command: formData.command.trim(),
-      description: formData.description.trim(),
-      tags: formData.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      host_id: formData.host_id,
-    });
-    setFormData({ name: "", command: "", description: "", tags: "", host_id: null });
+    const tags = formData.tags.split(",").map((t) => t.trim()).filter(Boolean);
+    if (editingSnippet) {
+      await updateSnippet({ ...editingSnippet, ...formData, tags });
+    } else {
+      await addSnippet({ ...formData, tags });
+    }
     setShowForm(false);
+    setEditingSnippet(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -55,7 +70,7 @@ export const SnippetManager: React.FC = () => {
           {snippets.length} snippet{snippets.length !== 1 && "s"}
         </span>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={openAdd}
           className="flex items-center gap-2 px-4 py-2 bg-cyan/10 border border-cyan/20 rounded-xl text-sm text-cyan hover:bg-cyan/20 transition-all"
         >
           <Plus size={16} /> New Snippet
@@ -64,6 +79,7 @@ export const SnippetManager: React.FC = () => {
 
       {showForm && (
         <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl space-y-4">
+          <h3 className="text-sm font-semibold">{editingSnippet ? "Edit Snippet" : "New Snippet"}</h3>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-fg2 ml-1">Name</label>
             <input
@@ -116,7 +132,7 @@ export const SnippetManager: React.FC = () => {
 
           <div className="flex justify-end gap-3 pt-2">
             <button
-              onClick={() => setShowForm(false)}
+              onClick={() => { setShowForm(false); setEditingSnippet(null); }}
               className="px-5 py-2 rounded-xl text-sm font-medium text-fg2 hover:bg-white/5 transition-all"
             >
               Cancel
@@ -126,7 +142,7 @@ export const SnippetManager: React.FC = () => {
               disabled={!formData.name.trim() || !formData.command.trim()}
               className="px-6 py-2 bg-gradient-to-br from-cyan to-purple rounded-xl text-sm font-bold text-bg0 shadow-lg disabled:opacity-40 transition-all"
             >
-              Add Snippet
+              {editingSnippet ? "Save Changes" : "Add Snippet"}
             </button>
           </div>
         </div>
@@ -165,6 +181,12 @@ export const SnippetManager: React.FC = () => {
                 </div>
               )}
             </div>
+            <button
+              onClick={() => openEdit(snippet)}
+              className="p-2 rounded-lg text-muted hover:text-cyan hover:bg-cyan/10 transition-all opacity-0 group-hover:opacity-100"
+            >
+              <Pencil size={16} />
+            </button>
             <button
               onClick={() => setDeleteId(snippet.id)}
               className="p-2 rounded-lg text-muted hover:text-err hover:bg-err/10 transition-all opacity-0 group-hover:opacity-100"
