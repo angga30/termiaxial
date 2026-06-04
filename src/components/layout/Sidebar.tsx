@@ -2,11 +2,10 @@ import React from "react";
 import {
   Terminal,
   Shield,
-  Globe,
-  FileCode,
   Settings,
   FolderTree,
   Clock,
+  Cable,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -15,7 +14,8 @@ interface SidebarProps {
   onSettingsClick?: () => void;
   onCredentialsClick?: () => void;
   onHistoryClick?: () => void;
-  activeView?: "terminal" | "sftp" | "credentials" | "settings" | "history";
+  onTunnelClick?: () => void;
+  activeView?: "terminal" | "sftp" | "credentials" | "settings" | "history" | "tunnels";
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -24,12 +24,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSettingsClick,
   onCredentialsClick,
   onHistoryClick,
+  onTunnelClick,
   activeView,
 }) => {
   return (
     <aside className="sidebar w-[68px] bg-gbg border-r border-white/5 backdrop-blur-xl flex flex-col items-center py-4 gap-2 z-10 h-full">
-      <div className="sidebar-logo w-10 h-10 bg-gradient-to-br from-cyan to-purple rounded-xl flex items-center justify-center mb-4 shadow-[0_4px_20px_rgba(0,240,255,0.3)]">
-        <Terminal className="text-bg0" size={24} strokeWidth={2.5} />
+      <div className="sidebar-logo w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+        <img src="/icon.png" alt="Tmax" className="w-9 h-9" />
       </div>
 
       <SidebarItem
@@ -50,14 +51,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         active={activeView === "credentials"}
         onClick={onCredentialsClick}
       />
-      <SidebarItem icon={<Globe size={20} />} title="Connections" />
+      <SidebarItem
+        icon={<Cable size={20} />}
+        title="Tunnels"
+        active={activeView === "tunnels"}
+        onClick={onTunnelClick}
+      />
       <SidebarItem
         icon={<Clock size={20} />}
         title="History"
         active={activeView === "history"}
         onClick={onHistoryClick}
       />
-      <SidebarItem icon={<FileCode size={20} />} title="Snippets" />
 
       <div className="flex-1" />
 

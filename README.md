@@ -1,9 +1,15 @@
-# Termiaxial (Tmax)
+<p align="center">
+  <img src="public/logo-text.png" alt="Tmax Termiaxial" width="400" />
+</p>
 
-**Ultra-lightweight SSH/SFTP client for Desktop & Android — built with Rust + Tauri v2**
+<p align="center">
+  <strong>Ultra-lightweight SSH/SFTP client for Desktop & Android — built with Rust + Tauri v2</strong>
+</p>
 
-[![CI](https://github.com/angga30/termiaxial/actions/workflows/ci.yml/badge.svg)](https://github.com/angga30/termiaxial/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://github.com/angga30/termiaxial/actions"><img src="https://github.com/angga30/termiaxial/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+</p>
 
 ---
 
@@ -72,11 +78,11 @@ npm run tauri build
 | Layer | Technology |
 |-------|-----------|
 | Framework | Tauri v2 |
-| Frontend | React 18 + TypeScript + Tailwind CSS |
+| Frontend | React 19 + TypeScript + Tailwind CSS |
 | Backend | Rust (russh, tokio) |
-| Terminal | Xterm.js v5 |
+| Terminal | Xterm.js v6 |
 | Crypto | ring (AES-GCM-256) + argon2 |
-| Database | SQLite |
+| Database | SQLite (WAL mode) |
 
 ---
 

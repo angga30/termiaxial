@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useSsh, SshOptions } from "../../hooks/use-ssh";
+import { useCommandHistory } from "../../hooks/use-command-history";
 import { useTerminalStore } from "../../stores/terminal-store";
 
 interface TerminalViewProps {
@@ -23,6 +24,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const connectedRef = useRef(false);
   const { connect, write, resize, isConnected } = useSsh();
+  const { onData: recordInput } = useCommandHistory(sessionId);
   const updateStatus = useTerminalStore((state) => state.updateSessionStatus);
 
   // Use refs to avoid stale closures in Xterm event listeners
@@ -72,7 +74,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.onData((data) => writeRef.current(data));
+    term.onData((data) => {
+      recordInput(data);
+      writeRef.current(data);
+    });
     term.onResize(({ cols, rows }) => resizeRef.current(cols, rows));
 
     // Shortcut for AI (Ctrl+Space)
