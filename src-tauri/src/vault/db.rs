@@ -74,7 +74,8 @@ impl DbManager {
             )
             .unwrap_or(0);
 
-        let migrations: Vec<(i32, &str)> = vec![
+        let migrations: Vec<(i32, &str)> =
+            vec![
             (1, "ALTER TABLE credentials ADD COLUMN workspace_id TEXT"),
             (2, "CREATE TABLE IF NOT EXISTS command_history (
                 id TEXT PRIMARY KEY,
@@ -131,8 +132,9 @@ impl DbManager {
 
     pub fn list_credentials(&self) -> Result<Vec<Credential>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT id, name, type, host, user, secret, added_at, workspace_id FROM credentials")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, type, host, user, secret, added_at, workspace_id FROM credentials",
+        )?;
         let cred_iter = stmt.query_map([], |row| {
             Ok(Credential {
                 id: row.get(0)?,
@@ -202,8 +204,7 @@ impl DbManager {
         )?;
         let snippet_iter = stmt.query_map([], |row| {
             let tags_str: String = row.get(4)?;
-            let tags: Vec<String> =
-                serde_json::from_str(&tags_str).unwrap_or_default();
+            let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
             Ok(Snippet {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -279,9 +280,7 @@ impl DbManager {
     pub fn list_workspaces(&self) -> Result<Vec<(String, String, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, name, created_at FROM workspaces")?;
-        let ws_iter = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?;
+        let ws_iter = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
 
         let mut results = Vec::new();
         for ws in ws_iter {
@@ -295,12 +294,22 @@ impl DbManager {
         conn.execute(
             "INSERT INTO command_history (id, session_id, command, timestamp, exit_code)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![entry.id, entry.session_id, entry.command, entry.timestamp, entry.exit_code],
+            params![
+                entry.id,
+                entry.session_id,
+                entry.command,
+                entry.timestamp,
+                entry.exit_code
+            ],
         )?;
         Ok(())
     }
 
-    pub fn list_history(&self, session_id: Option<&str>, limit: Option<usize>) -> Result<Vec<CommandHistoryEntry>> {
+    pub fn list_history(
+        &self,
+        session_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<CommandHistoryEntry>> {
         let conn = self.conn.lock().unwrap();
         let limit_val = limit.unwrap_or(100);
         let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match session_id {
@@ -314,7 +323,8 @@ impl DbManager {
             ),
         };
         let mut stmt = conn.prepare(&sql)?;
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         let entry_iter = stmt.query_map(param_refs.as_slice(), |row| {
             Ok(CommandHistoryEntry {
                 id: row.get(0)?,
@@ -331,7 +341,11 @@ impl DbManager {
         Ok(results)
     }
 
-    pub fn search_history(&self, query: &str, limit: Option<usize>) -> Result<Vec<CommandHistoryEntry>> {
+    pub fn search_history(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<CommandHistoryEntry>> {
         let conn = self.conn.lock().unwrap();
         let limit_val = limit.unwrap_or(50);
         let pattern = format!("%{}%", query);
@@ -360,7 +374,10 @@ impl DbManager {
         let conn = self.conn.lock().unwrap();
         match session_id {
             Some(sid) => {
-                conn.execute("DELETE FROM command_history WHERE session_id = ?1", params![sid])?;
+                conn.execute(
+                    "DELETE FROM command_history WHERE session_id = ?1",
+                    params![sid],
+                )?;
             }
             None => {
                 conn.execute("DELETE FROM command_history", [])?;

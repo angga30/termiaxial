@@ -8,7 +8,10 @@ pub fn fuzzy_match(pattern: &str, text: &str) -> Option<FuzzyMatch> {
     let text_lower = text.to_lowercase();
 
     if pattern.is_empty() {
-        return Some(FuzzyMatch { score: 0, matched_indices: Vec::new() });
+        return Some(FuzzyMatch {
+            score: 0,
+            matched_indices: Vec::new(),
+        });
     }
 
     let pattern_chars: Vec<char> = pattern.chars().collect();
@@ -54,7 +57,10 @@ pub fn fuzzy_match(pattern: &str, text: &str) -> Option<FuzzyMatch> {
 
     if pattern_idx == pattern_chars.len() {
         score += 100;
-        Some(FuzzyMatch { score, matched_indices })
+        Some(FuzzyMatch {
+            score,
+            matched_indices,
+        })
     } else {
         None
     }

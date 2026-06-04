@@ -3,9 +3,7 @@ use crate::ssh::client::ClientHandler;
 use russh::client::Handle;
 use russh_sftp::client::SftpSession;
 
-pub async fn create_sftp_session(
-    handle: &Handle<ClientHandler>,
-) -> Result<SftpSession, TmaxError> {
+pub async fn create_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession, TmaxError> {
     let channel = handle
         .channel_open_session()
         .await

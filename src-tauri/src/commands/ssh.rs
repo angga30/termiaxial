@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, ipc::Channel, State};
+use tauri::{ipc::Channel, AppHandle, Emitter, Manager, State};
 use tokio::select;
 use uuid::Uuid;
 
@@ -22,7 +22,11 @@ pub async fn connect_ssh(
     state: State<'_, SessionManager>,
     app: AppHandle,
 ) -> Result<(), TmaxError> {
-    tracing::debug!("IPC Command: connect_ssh id={} to {}", session_id, options.host);
+    tracing::debug!(
+        "IPC Command: connect_ssh id={} to {}",
+        session_id,
+        options.host
+    );
     let addr = format!("{}:{}", options.host, options.port);
     let (session, mut channel, mut cmd_rx) =
         SshSession::connect(addr, options.user, options.password, options.private_key)
@@ -124,10 +128,20 @@ pub async fn connect_ssh(
             let still_owns = manager
                 .sessions
                 .get(&sid_for_task)
-                .map(|s| Arc::ptr_eq(&s.handle, &handle_for_check.upgrade().unwrap_or_else(|| s.handle.clone())))
+                .map(|s| {
+                    Arc::ptr_eq(
+                        &s.handle,
+                        &handle_for_check
+                            .upgrade()
+                            .unwrap_or_else(|| s.handle.clone()),
+                    )
+                })
                 .unwrap_or(false);
             if !still_owns {
-                tracing::info!("Session {} was replaced; skipping cleanup removal", sid_for_task);
+                tracing::info!(
+                    "Session {} was replaced; skipping cleanup removal",
+                    sid_for_task
+                );
             } else {
                 manager.sessions.remove(&sid_for_task);
                 tracing::info!("Session {} cleaned up from session map", sid_for_task);
@@ -147,7 +161,7 @@ pub async fn disconnect_ssh(
     tracing::debug!("IPC Command: disconnect_ssh for session {}", session_id);
     if let Some((_, session)) = state.sessions.remove(&session_id) {
         let _ = session.cmd_tx.send(SshCommand::Disconnect);
-    tracing::debug!("Disconnect signal sent to session {}", session_id);
+        tracing::debug!("Disconnect signal sent to session {}", session_id);
         Ok(())
     } else {
         Err(TmaxError::Ssh("Session not found".to_string()))

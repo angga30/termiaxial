@@ -35,7 +35,11 @@ struct OpenAIRequestBody {
 
 #[tauri::command]
 pub async fn ai_analyze(request: AiRequest) -> Result<String, TmaxError> {
-    tracing::debug!("Starting analysis with provider: {} and model: {}", request.provider, request.model);
+    tracing::debug!(
+        "Starting analysis with provider: {} and model: {}",
+        request.provider,
+        request.model
+    );
     let client = Client::new();
 
     let prompt = format!(
@@ -58,7 +62,10 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, TmaxError> {
                 endpoint.push_str("chat/completions");
             }
 
-            tracing::debug!("Sending request to OpenAI-compatible endpoint: {}", endpoint);
+            tracing::debug!(
+                "Sending request to OpenAI-compatible endpoint: {}",
+                endpoint
+            );
 
             let body = OpenAIRequestBody {
                 model: request.model,
@@ -71,7 +78,10 @@ pub async fn ai_analyze(request: AiRequest) -> Result<String, TmaxError> {
             let mut req = client.post(endpoint).json(&body);
 
             if let Some(key) = request.api_key {
-                tracing::debug!("Using provided API key (starts with: {})", &key[..std::cmp::min(key.len(), 5)]);
+                tracing::debug!(
+                    "Using provided API key (starts with: {})",
+                    &key[..std::cmp::min(key.len(), 5)]
+                );
                 req = req.header("Authorization", format!("Bearer {}", key));
             } else {
                 tracing::warn!("No API key provided for OpenAI-compatible provider");

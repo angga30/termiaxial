@@ -1,6 +1,6 @@
+use crate::commands::ssh::SessionManager;
 use crate::domain::error::TmaxError;
 use crate::domain::models::TunnelConfig;
-use crate::commands::ssh::SessionManager;
 use dashmap::DashMap;
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
@@ -83,7 +83,10 @@ pub async fn create_tunnel(
 
     tracing::info!(
         "Creating local tunnel: localhost:{} -> {}:{} on session {}",
-        config.local_port, config.remote_host, config.remote_port, session_id
+        config.local_port,
+        config.remote_host,
+        config.remote_port,
+        session_id
     );
 
     let session = state
@@ -96,7 +99,10 @@ pub async fn create_tunnel(
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", config.local_port))
         .await
         .map_err(|e| {
-            TmaxError::Ssh(format!("Failed to bind local port {}: {}", config.local_port, e))
+            TmaxError::Ssh(format!(
+                "Failed to bind local port {}: {}",
+                config.local_port, e
+            ))
         })?;
 
     let actual_local_port = listener

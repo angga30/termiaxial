@@ -19,7 +19,11 @@ pub async fn history_list(
     limit: Option<usize>,
     db: State<'_, DbManager>,
 ) -> Result<Vec<CommandHistoryEntry>, TmaxError> {
-    tracing::debug!("Listing history, session_id={:?}, limit={:?}", session_id, limit);
+    tracing::debug!(
+        "Listing history, session_id={:?}, limit={:?}",
+        session_id,
+        limit
+    );
     Ok(db.list_history(session_id.as_deref(), limit)?)
 }
 

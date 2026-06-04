@@ -37,8 +37,8 @@ pub async fn vault_setup(
         .map_err(|e| TmaxError::Vault(format!("KDF Error: {}", e)))?;
 
     let verify_plaintext = b"termiaxial_v1_ok";
-    let verify_encrypted =
-        crypto::encrypt(verify_plaintext, &key).map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
+    let verify_encrypted = crypto::encrypt(verify_plaintext, &key)
+        .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
 
     let verify_b64 =
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, verify_encrypted);
@@ -71,8 +71,8 @@ pub async fn vault_unlock(
         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, verify_b64)
             .map_err(|_| TmaxError::Vault("Invalid verification data".to_string()))?;
 
-    let verify_decrypted =
-        crypto::decrypt(&verify_encrypted, &key).map_err(|_| TmaxError::Auth("Incorrect Master Password".to_string()))?;
+    let verify_decrypted = crypto::decrypt(&verify_encrypted, &key)
+        .map_err(|_| TmaxError::Auth("Incorrect Master Password".to_string()))?;
 
     if verify_decrypted != b"termiaxial_v1_ok" {
         return Err(TmaxError::Auth("Verification failed".to_string()));
@@ -98,11 +98,13 @@ pub async fn vault_add_credential(
     tracing::info!("Adding credential: {:?}", cred);
 
     let key_lock = state.0.read().await;
-    let key = key_lock.as_ref().ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     if let Some(secret) = cred.secret {
-        let encrypted =
-            crypto::encrypt(&secret, key).map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
+        let encrypted = crypto::encrypt(&secret, key)
+            .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
         cred.secret = Some(encrypted);
     }
 
@@ -136,11 +138,13 @@ pub async fn vault_update_credential(
     tracing::info!("Updating credential: {:?}", cred);
 
     let key_lock = state.0.read().await;
-    let key = key_lock.as_ref().ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     if let Some(secret) = cred.secret {
-        let encrypted =
-            crypto::encrypt(&secret, key).map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
+        let encrypted = crypto::encrypt(&secret, key)
+            .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
         cred.secret = Some(encrypted);
     }
 
@@ -155,7 +159,9 @@ pub async fn vault_list_credentials(
     tracing::info!("Listing credentials");
 
     let key_lock = state.0.read().await;
-    let key = key_lock.as_ref().ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     let mut creds = db.list_credentials().map_err(|e| {
         tracing::error!("Database error: {}", e);
@@ -219,10 +225,13 @@ pub async fn vault_list_workspaces(
     }
 
     let workspaces = db.list_workspaces().map_err(TmaxError::from)?;
-    
-    Ok(workspaces.into_iter().map(|(id, name, created_at)| Workspace {
-        id,
-        name,
-        created_at,
-    }).collect())
+
+    Ok(workspaces
+        .into_iter()
+        .map(|(id, name, created_at)| Workspace {
+            id,
+            name,
+            created_at,
+        })
+        .collect())
 }

@@ -45,6 +45,27 @@ Termiaxial is a **zero-bloat SSH client** that replaces Termius, PuTTY, and WinS
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshot/terminal.png" alt="Terminal" width="100%" />
+</p>
+
+<details>
+<summary><strong>More screenshots</strong></summary>
+
+| SFTP Explorer | SSH Tunnels |
+|:---:|:---:|
+| ![SFTP](screenshot/sftp.png) | ![Tunnels](screenshot/tunnel.png) |
+
+| Credential Vault | AI Assistant |
+|:---:|:---:|
+| ![Vault](screenshot/vault.png) | ![AI](screenshot/ai.png) |
+
+</details>
+
+---
+
 ## 🚀 Roadmap
 
 See [MVP2 Roadmap](docs/MVP2_ROADMAP.md) for upcoming features:

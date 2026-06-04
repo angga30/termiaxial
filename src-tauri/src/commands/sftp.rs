@@ -79,7 +79,11 @@ pub async fn sftp_list_dir(
     path: String,
     state: State<'_, SessionManager>,
 ) -> Result<Vec<SftpEntry>, TmaxError> {
-    tracing::debug!("Listing remote directory: {} for session {}", path, session_id);
+    tracing::debug!(
+        "Listing remote directory: {} for session {}",
+        path,
+        session_id
+    );
     let path = if path.is_empty() { "/" } else { &path };
     if let Some(session) = state.sessions.get(&session_id) {
         tracing::debug!("Opening new channel for SFTP subsystem");
@@ -137,7 +141,10 @@ pub async fn sftp_download(
             .await
             .map_err(|e| TmaxError::Sftp(format!("Failed to open remote file: {:?}", e)))?;
 
-        let metadata = remote_file.metadata().await.map_err(|e| TmaxError::Sftp(e.to_string()))?;
+        let metadata = remote_file
+            .metadata()
+            .await
+            .map_err(|e| TmaxError::Sftp(e.to_string()))?;
         let total_size = metadata.size.unwrap_or(0);
         let filename = Path::new(&remote_path)
             .file_name()
@@ -203,7 +210,10 @@ pub async fn sftp_upload(
             .await
             .map_err(|e| TmaxError::Io(format!("Failed to open local file: {:?}", e)))?;
 
-        let metadata = local_file.metadata().await.map_err(|e| TmaxError::Io(e.to_string()))?;
+        let metadata = local_file
+            .metadata()
+            .await
+            .map_err(|e| TmaxError::Io(e.to_string()))?;
         let total_size = metadata.len();
         let filename = Path::new(&local_path)
             .file_name()
@@ -284,7 +294,10 @@ pub async fn sftp_transfer_remote(
         .await
         .map_err(|e| TmaxError::Sftp(format!("Failed to open src file: {:?}", e)))?;
 
-    let metadata = src_file.metadata().await.map_err(|e| TmaxError::Sftp(e.to_string()))?;
+    let metadata = src_file
+        .metadata()
+        .await
+        .map_err(|e| TmaxError::Sftp(e.to_string()))?;
     let total_size = metadata.size.unwrap_or(0);
     let filename = Path::new(&src_path)
         .file_name()

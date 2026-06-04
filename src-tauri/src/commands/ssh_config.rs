@@ -154,10 +154,7 @@ pub async fn ssh_config_detect_changes(
     let config_entries = crate::commands::import::parse_ssh_config(&content);
 
     let vault_creds = db.list_credentials()?;
-    let vault_hosts: HashSet<String> = vault_creds
-        .iter()
-        .filter_map(|c| c.host.clone())
-        .collect();
+    let vault_hosts: HashSet<String> = vault_creds.iter().filter_map(|c| c.host.clone()).collect();
 
     let mut changes = Vec::new();
     for entry in &config_entries {
@@ -208,10 +205,7 @@ pub async fn ssh_config_sync_from_config(
     let config_entries = crate::commands::import::parse_ssh_config(&content);
 
     let vault_creds = db.list_credentials()?;
-    let vault_hosts: HashSet<String> = vault_creds
-        .iter()
-        .filter_map(|c| c.host.clone())
-        .collect();
+    let vault_hosts: HashSet<String> = vault_creds.iter().filter_map(|c| c.host.clone()).collect();
 
     let key_lock = vault_state.0.read().await;
     let key = key_lock

@@ -6,22 +6,31 @@ mod vault;
 
 use crate::commands::ai::ai_analyze;
 use crate::commands::history::{history_clear, history_list, history_record, history_search};
-use crate::commands::recording::{start_recording, stop_recording, recording_status, RecordingManager};
+use crate::commands::import::{
+    import_detect_sources, import_keys, import_selected, import_ssh_config, import_termius,
+};
+use crate::commands::recording::{
+    recording_status, start_recording, stop_recording, RecordingManager,
+};
 use crate::commands::sftp::{
     sftp_download, sftp_get_home_dir, sftp_list_dir, sftp_list_local_dir, sftp_transfer_remote,
     sftp_upload,
 };
-use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
-use crate::commands::ssh_config::{ssh_config_detect_changes, ssh_config_sync_from_config, ssh_config_sync_status, ssh_config_write_credential};
-use crate::commands::tunnel::{create_tunnel, close_tunnel, list_tunnels, TunnelManager};
-use crate::domain::events::EventBus;
-use crate::commands::import::{import_detect_sources, import_keys, import_selected, import_ssh_config, import_termius};
-use crate::commands::snippet::{snippet_add, snippet_delete, snippet_list, snippet_search, snippet_update};
-use crate::commands::vault::{
-    vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata, vault_list_credentials,
-    vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
-    vault_update_credential,
+use crate::commands::snippet::{
+    snippet_add, snippet_delete, snippet_list, snippet_search, snippet_update,
 };
+use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
+use crate::commands::ssh_config::{
+    ssh_config_detect_changes, ssh_config_sync_from_config, ssh_config_sync_status,
+    ssh_config_write_credential,
+};
+use crate::commands::tunnel::{close_tunnel, create_tunnel, list_tunnels, TunnelManager};
+use crate::commands::vault::{
+    vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata,
+    vault_list_credentials, vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup,
+    vault_status, vault_unlock, vault_update_credential,
+};
+use crate::domain::events::EventBus;
 use crate::vault::{DbManager, VaultState};
 use dashmap::DashMap;
 use tauri::Manager;
