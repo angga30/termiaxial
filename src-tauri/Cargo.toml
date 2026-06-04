@@ -1,6 +1,6 @@
 [package]
 name = "termiaxial"
-version = "1.0.0"
+version = "1.2.0"
 description = "Termiaxial (Tmax) - Ultra-lightweight SSH/SFTP client"
 authors = ["you"]
 edition = "2021"
@@ -36,6 +36,8 @@ futures = "0.3"
 dashmap = "6.0"
 uuid = { version = "1", features = ["v4"] }
 russh-sftp = "2.0"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_with = "3.0"
 base64 = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

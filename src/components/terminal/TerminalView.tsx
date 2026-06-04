@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useSsh, SshOptions } from "../../hooks/use-ssh";
+import { useCommandHistory } from "../../hooks/use-command-history";
 import { useTerminalStore } from "../../stores/terminal-store";
 
 interface TerminalViewProps {
@@ -21,7 +22,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const connectedRef = useRef(false);
   const { connect, write, resize, isConnected } = useSsh();
+  const { onData: recordInput } = useCommandHistory(sessionId);
   const updateStatus = useTerminalStore((state) => state.updateSessionStatus);
 
   // Use refs to avoid stale closures in Xterm event listeners
@@ -71,7 +74,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.onData((data) => writeRef.current(data));
+    term.onData((data) => {
+      recordInput(data);
+      writeRef.current(data);
+    });
     term.onResize(({ cols, rows }) => resizeRef.current(cols, rows));
 
     // Shortcut for AI (Ctrl+Space)
@@ -100,19 +106,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
     resizeObserver.observe(terminalRef.current);
 
-    // Connect
+    // Connect — guard against StrictMode double-invoke
+    if (connectedRef.current) {
+      console.warn(`[TerminalView] session=${sessionId} double-mount detected, skipping connect`);
+      return;
+    }
+    connectedRef.current = true;
+    console.log(`[TerminalView] session=${sessionId} starting connect`);
     updateStatus(sessionId, "connecting");
     connect(sessionId, options, (data) => {
-      term.write(data);
+      console.debug(`[TerminalView] term.write session=${sessionId} bytes=${data.length} disposed=${xtermRef.current === null}`);
+      xtermRef.current?.write(data);
     })
-      .then(() => updateStatus(sessionId, "connected"))
+      .then(() => {
+        console.log(`[TerminalView] session=${sessionId} connected OK`);
+        updateStatus(sessionId, "connected");
+      })
       .catch((err) => {
-        term.writeln(`\r\n\x1b[31mError connecting: ${err}\x1b[0m`);
+        console.error(`[TerminalView] session=${sessionId} connect error:`, err);
+        xtermRef.current?.writeln(`\r\n\x1b[31mError connecting: ${err}\x1b[0m`);
         updateStatus(sessionId, "error");
       });
 
     return () => {
+      console.log(`[TerminalView] session=${sessionId} cleanup (dispose)`);
       resizeObserver.disconnect();
+      xtermRef.current = null;
       term.dispose();
       updateStatus(sessionId, "disconnected");
     };

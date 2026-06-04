@@ -1,41 +1,18 @@
+use crate::domain::error::TmaxError;
+use crate::domain::models::{Credential, VaultStatus, Workspace};
 use crate::vault::{self, crypto, DbManager, VaultState};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Credential {
-    pub id: String,
-    pub name: String,
-    pub r#type: String,
-    pub host: Option<String>,
-    pub user: Option<String>,
-    pub secret: Option<Vec<u8>>,
-    pub added_at: String,
-    pub workspace_id: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Workspace {
-    pub id: String,
-    pub name: String,
-    pub created_at: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct VaultStatus {
-    pub initialized: bool,
-    pub locked: bool,
-}
-
 #[tauri::command]
 pub async fn vault_status(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<VaultStatus, String> {
-    let salt = db.get_metadata("vault_salt").map_err(|e| e.to_string())?;
+) -> Result<VaultStatus, TmaxError> {
+    let salt = db.get_metadata("vault_salt")?;
     let initialized = salt.is_some();
-    let locked = state.0.read().unwrap().is_none();
+    let locked = state.0.read().await.is_none();
 
     Ok(VaultStatus {
         initialized,
@@ -48,8 +25,7 @@ pub async fn vault_setup(
     password: String,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
-    // Generate salt
+) -> Result<(), TmaxError> {
     let mut salt_bytes = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut salt_bytes);
     let salt_b64 = base64::Engine::encode(
@@ -57,27 +33,20 @@ pub async fn vault_setup(
         salt_bytes,
     );
 
-    // Derive key
-
     let key = crypto::derive_key(&password, salt_b64.as_bytes())
-        .map_err(|e| format!("KDF Error: {}", e))?;
+        .map_err(|e| TmaxError::Vault(format!("KDF Error: {}", e)))?;
 
-    // Create verification string
     let verify_plaintext = b"termiaxial_v1_ok";
-    let verify_encrypted =
-        crypto::encrypt(verify_plaintext, &key).map_err(|e| format!("Encryption Error: {}", e))?;
+    let verify_encrypted = crypto::encrypt(verify_plaintext, &key)
+        .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
 
     let verify_b64 =
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, verify_encrypted);
 
-    // Save to DB
-    db.set_metadata("vault_salt", &salt_b64)
-        .map_err(|e| e.to_string())?;
-    db.set_metadata("vault_verify", &verify_b64)
-        .map_err(|e| e.to_string())?;
+    db.set_metadata("vault_salt", &salt_b64)?;
+    db.set_metadata("vault_verify", &verify_b64)?;
 
-    // Store key in memory
-    *state.0.write().unwrap() = Some(key);
+    *state.0.write().await = Some(key);
 
     Ok(())
 }
@@ -87,41 +56,36 @@ pub async fn vault_unlock(
     password: String,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
+) -> Result<(), TmaxError> {
     let salt_b64 = db
-        .get_metadata("vault_salt")
-        .map_err(|e| e.to_string())?
-        .ok_or("Vault not initialized")?;
+        .get_metadata("vault_salt")?
+        .ok_or(TmaxError::Vault("Vault not initialized".to_string()))?;
     let verify_b64 = db
-        .get_metadata("vault_verify")
-        .map_err(|e| e.to_string())?
-        .ok_or("Vault corrupted")?;
+        .get_metadata("vault_verify")?
+        .ok_or(TmaxError::Vault("Vault corrupted".to_string()))?;
 
-    // Derive key
     let key = crypto::derive_key(&password, salt_b64.as_bytes())
-        .map_err(|e| format!("KDF Error: {}", e))?;
+        .map_err(|e| TmaxError::Vault(format!("KDF Error: {}", e)))?;
 
-    // Verify key
     let verify_encrypted =
         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, verify_b64)
-            .map_err(|_| "Invalid verification data")?;
+            .map_err(|_| TmaxError::Vault("Invalid verification data".to_string()))?;
 
-    let verify_decrypted =
-        crypto::decrypt(&verify_encrypted, &key).map_err(|_| "Incorrect Master Password")?;
+    let verify_decrypted = crypto::decrypt(&verify_encrypted, &key)
+        .map_err(|_| TmaxError::Auth("Incorrect Master Password".to_string()))?;
 
     if verify_decrypted != b"termiaxial_v1_ok" {
-        return Err("Verification failed".to_string());
+        return Err(TmaxError::Auth("Verification failed".to_string()));
     }
 
-    // Store key in memory
-    *state.0.write().unwrap() = Some(key);
+    *state.0.write().await = Some(key);
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn vault_lock(state: State<'_, VaultState>) -> Result<(), String> {
-    *state.0.write().unwrap() = None;
+pub async fn vault_lock(state: State<'_, VaultState>) -> Result<(), TmaxError> {
+    *state.0.write().await = None;
     Ok(())
 }
 
@@ -130,22 +94,23 @@ pub async fn vault_add_credential(
     mut cred: Credential,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
-    println!("Backend: Adding credential: {:?}", cred);
+) -> Result<(), TmaxError> {
+    tracing::info!("Adding credential: {:?}", cred);
 
-    let key_lock = state.0.read().unwrap();
-    let key = key_lock.as_ref().ok_or("Vault is locked")?;
+    let key_lock = state.0.read().await;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     if let Some(secret) = cred.secret {
-        let encrypted =
-            crypto::encrypt(&secret, key).map_err(|e| format!("Encryption Error: {}", e))?;
+        let encrypted = crypto::encrypt(&secret, key)
+            .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
         cred.secret = Some(encrypted);
     }
 
     db.add_credential(&cred).map_err(|e| {
-        let err_msg = format!("Database error: {}", e);
-        eprintln!("{}", err_msg);
-        err_msg
+        tracing::error!("Database error: {}", e);
+        TmaxError::from(e)
     })
 }
 
@@ -154,15 +119,14 @@ pub async fn vault_delete_credential(
     id: String,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
-    println!("Backend: Deleting credential: {}", id);
+) -> Result<(), TmaxError> {
+    tracing::info!("Deleting credential: {}", id);
 
-    // Safety check: ensure vault is unlocked (though delete doesn't need the key)
-    if state.0.read().unwrap().is_none() {
-        return Err("Vault is locked".to_string());
+    if state.0.read().await.is_none() {
+        return Err(TmaxError::Vault("Vault is locked".to_string()));
     }
 
-    db.delete_credential(&id).map_err(|e| e.to_string())
+    db.delete_credential(&id).map_err(TmaxError::from)
 }
 
 #[tauri::command]
@@ -170,35 +134,38 @@ pub async fn vault_update_credential(
     mut cred: Credential,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
-    println!("Backend: Updating credential: {:?}", cred);
+) -> Result<(), TmaxError> {
+    tracing::info!("Updating credential: {:?}", cred);
 
-    let key_lock = state.0.read().unwrap();
-    let key = key_lock.as_ref().ok_or("Vault is locked")?;
+    let key_lock = state.0.read().await;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     if let Some(secret) = cred.secret {
-        let encrypted =
-            crypto::encrypt(&secret, key).map_err(|e| format!("Encryption Error: {}", e))?;
+        let encrypted = crypto::encrypt(&secret, key)
+            .map_err(|e| TmaxError::Vault(format!("Encryption Error: {}", e)))?;
         cred.secret = Some(encrypted);
     }
 
-    db.update_credential(&cred).map_err(|e| e.to_string())
+    db.update_credential(&cred).map_err(TmaxError::from)
 }
 
 #[tauri::command]
 pub async fn vault_list_credentials(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<Vec<Credential>, String> {
-    println!("Backend: Listing credentials");
+) -> Result<Vec<Credential>, TmaxError> {
+    tracing::info!("Listing credentials");
 
-    let key_lock = state.0.read().unwrap();
-    let key = key_lock.as_ref().ok_or("Vault is locked")?;
+    let key_lock = state.0.read().await;
+    let key = key_lock
+        .as_ref()
+        .ok_or(TmaxError::Vault("Vault is locked".to_string()))?;
 
     let mut creds = db.list_credentials().map_err(|e| {
-        let err_msg = format!("Database error: {}", e);
-        eprintln!("{}", err_msg);
-        err_msg
+        tracing::error!("Database error: {}", e);
+        TmaxError::from(e)
     })?;
 
     for cred in creds.iter_mut() {
@@ -208,8 +175,7 @@ pub async fn vault_list_credentials(
                     cred.secret = Some(decrypted);
                 }
                 Err(_) => {
-                    eprintln!("Failed to decrypt credential {}", cred.id);
-                    // Keep secret as None if decryption fails
+                    tracing::error!("Failed to decrypt credential {}", cred.id);
                 }
             }
         }
@@ -223,16 +189,16 @@ pub async fn vault_set_metadata(
     key: String,
     value: String,
     db: State<'_, DbManager>,
-) -> Result<(), String> {
-    db.set_metadata(&key, &value).map_err(|e| e.to_string())
+) -> Result<(), TmaxError> {
+    db.set_metadata(&key, &value).map_err(TmaxError::from)
 }
 
 #[tauri::command]
 pub async fn vault_get_metadata(
     key: String,
     db: State<'_, DbManager>,
-) -> Result<Option<String>, String> {
-    db.get_metadata(&key).map_err(|e| e.to_string())
+) -> Result<Option<String>, TmaxError> {
+    db.get_metadata(&key).map_err(TmaxError::from)
 }
 
 #[tauri::command]
@@ -240,31 +206,32 @@ pub async fn vault_create_workspace(
     workspace: Workspace,
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<(), String> {
-    // Safety check: ensure vault is unlocked
-    if state.0.read().unwrap().is_none() {
-        return Err("Vault is locked".to_string());
+) -> Result<(), TmaxError> {
+    if state.0.read().await.is_none() {
+        return Err(TmaxError::Vault("Vault is locked".to_string()));
     }
 
     db.create_workspace(&workspace.id, &workspace.name, &workspace.created_at)
-        .map_err(|e| e.to_string())
+        .map_err(TmaxError::from)
 }
 
 #[tauri::command]
 pub async fn vault_list_workspaces(
     db: State<'_, DbManager>,
     state: State<'_, VaultState>,
-) -> Result<Vec<Workspace>, String> {
-    // Safety check: ensure vault is unlocked
-    if state.0.read().unwrap().is_none() {
-        return Err("Vault is locked".to_string());
+) -> Result<Vec<Workspace>, TmaxError> {
+    if state.0.read().await.is_none() {
+        return Err(TmaxError::Vault("Vault is locked".to_string()));
     }
 
-    let workspaces = db.list_workspaces().map_err(|e| e.to_string())?;
-    
-    Ok(workspaces.into_iter().map(|(id, name, created_at)| Workspace {
-        id,
-        name,
-        created_at,
-    }).collect())
+    let workspaces = db.list_workspaces().map_err(TmaxError::from)?;
+
+    Ok(workspaces
+        .into_iter()
+        .map(|(id, name, created_at)| Workspace {
+            id,
+            name,
+            created_at,
+        })
+        .collect())
 }

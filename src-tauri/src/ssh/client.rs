@@ -12,10 +12,8 @@ impl Handler for ClientHandler {
         &mut self,
         _server_public_key: &russh_keys::key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        println!("[SSH DEBUG] Verifying server public key...");
-        // MVP: Trust On First Use (TOFU) or simply accept all for now.
-        // In a real production app, we would verify the fingerprint against known_hosts.
-        println!("[SSH DEBUG] Server key accepted (TOFU Mode)");
+        tracing::debug!("Verifying server public key...");
+        tracing::debug!("Server key accepted (TOFU Mode)");
         Ok(true)
     }
 

@@ -1,9 +1,22 @@
 pub mod ai;
+pub mod fuzzy;
+pub mod history;
+pub mod import;
+pub mod recording;
 pub mod sftp;
+pub mod snippet;
 pub mod ssh;
+pub mod ssh_config;
+pub mod tunnel;
 pub mod vault;
 
 pub use ai::*;
+pub use history::*;
+pub use import::*;
+pub use recording::*;
 pub use sftp::*;
+pub use snippet::*;
 pub use ssh::*;
+pub use ssh_config::*;
+pub use tunnel::*;
 pub use vault::*;

@@ -1,22 +1,40 @@
 mod commands;
+mod domain;
+mod infrastructure;
 mod ssh;
 mod vault;
 
 use crate::commands::ai::ai_analyze;
+use crate::commands::history::{history_clear, history_list, history_record, history_search};
+use crate::commands::import::{
+    import_detect_sources, import_keys, import_selected, import_ssh_config, import_termius,
+};
+use crate::commands::recording::{
+    recording_status, start_recording, stop_recording, RecordingManager,
+};
 use crate::commands::sftp::{
     sftp_download, sftp_get_home_dir, sftp_list_dir, sftp_list_local_dir, sftp_transfer_remote,
     sftp_upload,
 };
-use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
-use crate::commands::vault::{
-    vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata, vault_list_credentials,
-    vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup, vault_status, vault_unlock,
-    vault_update_credential,
+use crate::commands::snippet::{
+    snippet_add, snippet_delete, snippet_list, snippet_search, snippet_update,
 };
+use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
+use crate::commands::ssh_config::{
+    ssh_config_detect_changes, ssh_config_sync_from_config, ssh_config_sync_status,
+    ssh_config_write_credential,
+};
+use crate::commands::tunnel::{close_tunnel, create_tunnel, list_tunnels, TunnelManager};
+use crate::commands::vault::{
+    vault_add_credential, vault_create_workspace, vault_delete_credential, vault_get_metadata,
+    vault_list_credentials, vault_list_workspaces, vault_lock, vault_set_metadata, vault_setup,
+    vault_status, vault_unlock, vault_update_credential,
+};
+use crate::domain::events::EventBus;
 use crate::vault::{DbManager, VaultState};
 use dashmap::DashMap;
-use std::sync::RwLock;
 use tauri::Manager;
+use tokio::sync::RwLock;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,8 +43,12 @@ pub fn run() {
         .manage(SessionManager {
             sessions: DashMap::new(),
         })
+        .manage(RecordingManager::new())
+        .manage(EventBus::new(256))
+        .manage(TunnelManager::new())
         .manage(VaultState(RwLock::new(None)))
         .setup(|app| {
+            crate::infrastructure::logging::init();
             let app_data_dir = app.path().app_data_dir()?;
             if !app_data_dir.exists() {
                 std::fs::create_dir_all(&app_data_dir)?;
@@ -43,6 +65,9 @@ pub fn run() {
             disconnect_ssh,
             write_ssh,
             resize_pty,
+            start_recording,
+            stop_recording,
+            recording_status,
             sftp_list_dir,
             sftp_list_local_dir,
             sftp_get_home_dir,
@@ -61,7 +86,28 @@ pub fn run() {
             vault_setup,
             vault_unlock,
             vault_lock,
-            ai_analyze
+            ai_analyze,
+            import_detect_sources,
+            import_ssh_config,
+            import_keys,
+            import_termius,
+            import_selected,
+            snippet_add,
+            snippet_list,
+            snippet_delete,
+            snippet_update,
+            snippet_search,
+            history_record,
+            history_list,
+            history_search,
+            history_clear,
+            ssh_config_sync_status,
+            ssh_config_write_credential,
+            ssh_config_detect_changes,
+            ssh_config_sync_from_config,
+            create_tunnel,
+            close_tunnel,
+            list_tunnels
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

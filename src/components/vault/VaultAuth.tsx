@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Shield,
   Lock,
   Unlock,
   KeyRound,
@@ -41,8 +40,8 @@ export const VaultAuth: React.FC = () => {
 
       <div className="w-full max-w-md p-8 relative z-10 animate-fade-in">
         <div className="flex flex-col items-center text-center space-y-6">
-          <div className="w-20 h-20 bg-gradient-to-br from-cyan to-purple rounded-3xl flex items-center justify-center shadow-[0_0_40px_rgba(0,240,255,0.2)] animate-pulse">
-            <Shield className="text-bg0" size={40} strokeWidth={2.5} />
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center">
+            <img src="/icon.png" alt="Termiaxial" className="w-16 h-16" />
           </div>
 
           <div className="space-y-2">

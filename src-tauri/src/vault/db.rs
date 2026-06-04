@@ -1,20 +1,21 @@
-use crate::commands::vault::Credential;
+use crate::domain::models::{CommandHistoryEntry, Credential, Snippet};
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 pub struct DbManager {
-    pub conn: Mutex<Connection>,
+    pub conn: Mutex<Connection>, // std::sync::Mutex required: rusqlite::Connection is !Send, so tokio::sync::Mutex won't compile
 }
 
 impl DbManager {
     pub fn new(path: PathBuf) -> Result<Self> {
         let conn = Connection::open(path)?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let manager = Self {
             conn: Mutex::new(conn),
         };
         manager.init_tables()?;
-        manager.migrate_database()?;
+        manager.run_migrations()?;
         Ok(manager)
     }
 
@@ -54,14 +55,59 @@ impl DbManager {
         Ok(())
     }
 
-    fn migrate_database(&self) -> Result<()> {
+    fn run_migrations(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        
-        let _ = conn.execute(
-            "ALTER TABLE credentials ADD COLUMN workspace_id TEXT",
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )",
             [],
-        );
-        
+        )?;
+
+        let current_version: i32 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM _migrations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let migrations: Vec<(i32, &str)> =
+            vec![
+            (1, "ALTER TABLE credentials ADD COLUMN workspace_id TEXT"),
+            (2, "CREATE TABLE IF NOT EXISTS command_history (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                command TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                exit_code INTEGER
+            )"),
+            (3, "CREATE INDEX IF NOT EXISTS idx_history_session ON command_history(session_id)"),
+            (4, "CREATE INDEX IF NOT EXISTS idx_history_timestamp ON command_history(timestamp)"),
+            (5, "CREATE TABLE IF NOT EXISTS snippets (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '[]',
+                host_id TEXT,
+                created_at TEXT NOT NULL
+            )"),
+        ];
+
+        for (version, sql) in migrations {
+            if version > current_version {
+                conn.execute(sql, [])?;
+                conn.execute(
+                    "INSERT INTO _migrations (version, applied_at) VALUES (?1, datetime('now'))",
+                    params![version],
+                )?;
+                tracing::info!("Applied migration v{}", version);
+            }
+        }
+
         Ok(())
     }
 
@@ -86,8 +132,9 @@ impl DbManager {
 
     pub fn list_credentials(&self) -> Result<Vec<Credential>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT id, name, type, host, user, secret, added_at, workspace_id FROM credentials")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, type, host, user, secret, added_at, workspace_id FROM credentials",
+        )?;
         let cred_iter = stmt.query_map([], |row| {
             Ok(Credential {
                 id: row.get(0)?,
@@ -131,6 +178,74 @@ impl DbManager {
         Ok(())
     }
 
+    pub fn add_snippet(&self, snippet: &Snippet) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&snippet.tags).unwrap_or("[]".to_string());
+        conn.execute(
+            "INSERT INTO snippets (id, name, command, description, tags, host_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                snippet.id,
+                snippet.name,
+                snippet.command,
+                snippet.description,
+                tags_json,
+                snippet.host_id,
+                snippet.created_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_snippets(&self) -> Result<Vec<Snippet>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, command, description, tags, host_id, created_at FROM snippets",
+        )?;
+        let snippet_iter = stmt.query_map([], |row| {
+            let tags_str: String = row.get(4)?;
+            let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
+            Ok(Snippet {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                command: row.get(2)?,
+                description: row.get(3)?,
+                tags,
+                host_id: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+
+        let mut results = Vec::new();
+        for snippet in snippet_iter {
+            results.push(snippet?);
+        }
+        Ok(results)
+    }
+
+    pub fn delete_snippet(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn update_snippet(&self, snippet: &Snippet) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&snippet.tags).unwrap_or("[]".to_string());
+        conn.execute(
+            "UPDATE snippets SET name = ?1, command = ?2, description = ?3, tags = ?4, host_id = ?5 WHERE id = ?6",
+            params![
+                snippet.name,
+                snippet.command,
+                snippet.description,
+                tags_json,
+                snippet.host_id,
+                snippet.id
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn set_metadata(&self, key: &str, value: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -165,14 +280,109 @@ impl DbManager {
     pub fn list_workspaces(&self) -> Result<Vec<(String, String, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, name, created_at FROM workspaces")?;
-        let ws_iter = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?;
+        let ws_iter = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
 
         let mut results = Vec::new();
         for ws in ws_iter {
             results.push(ws?);
         }
         Ok(results)
+    }
+
+    pub fn record_command(&self, entry: &CommandHistoryEntry) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO command_history (id, session_id, command, timestamp, exit_code)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                entry.id,
+                entry.session_id,
+                entry.command,
+                entry.timestamp,
+                entry.exit_code
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_history(
+        &self,
+        session_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<CommandHistoryEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let limit_val = limit.unwrap_or(100);
+        let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match session_id {
+            Some(sid) => (
+                format!("SELECT id, session_id, command, timestamp, exit_code FROM command_history WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT {}", limit_val),
+                vec![Box::new(sid.to_string())],
+            ),
+            None => (
+                format!("SELECT id, session_id, command, timestamp, exit_code FROM command_history ORDER BY timestamp DESC LIMIT {}", limit_val),
+                vec![],
+            ),
+        };
+        let mut stmt = conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        let entry_iter = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok(CommandHistoryEntry {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                command: row.get(2)?,
+                timestamp: row.get(3)?,
+                exit_code: row.get(4)?,
+            })
+        })?;
+        let mut results = Vec::new();
+        for entry in entry_iter {
+            results.push(entry?);
+        }
+        Ok(results)
+    }
+
+    pub fn search_history(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<CommandHistoryEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let limit_val = limit.unwrap_or(50);
+        let pattern = format!("%{}%", query);
+        let sql = format!(
+            "SELECT id, session_id, command, timestamp, exit_code FROM command_history WHERE command LIKE ?1 ORDER BY timestamp DESC LIMIT {}",
+            limit_val
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let entry_iter = stmt.query_map(params![pattern], |row| {
+            Ok(CommandHistoryEntry {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                command: row.get(2)?,
+                timestamp: row.get(3)?,
+                exit_code: row.get(4)?,
+            })
+        })?;
+        let mut results = Vec::new();
+        for entry in entry_iter {
+            results.push(entry?);
+        }
+        Ok(results)
+    }
+
+    pub fn clear_history(&self, session_id: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        match session_id {
+            Some(sid) => {
+                conn.execute(
+                    "DELETE FROM command_history WHERE session_id = ?1",
+                    params![sid],
+                )?;
+            }
+            None => {
+                conn.execute("DELETE FROM command_history", [])?;
+            }
+        }
+        Ok(())
     }
 }

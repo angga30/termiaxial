@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { Settings as SettingsIcon, Sliders, Sparkles } from "lucide-react";
+import { Settings as SettingsIcon, Sliders, Sparkles, FileText, Terminal } from "lucide-react";
 import { AiSettings } from "./AiSettings";
+import { SshConfigSync } from "./SshConfigSync";
+import { SnippetManager } from "../snippet/SnippetManager";
 
 export const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"general" | "ai">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "ai" | "sshconfig" | "snippets">("general");
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -26,10 +28,24 @@ export const Settings: React.FC = () => {
             active={activeTab === "ai"}
             onClick={() => setActiveTab("ai")}
           />
+          <SettingsTab
+            icon={<FileText size={18} />}
+            title="SSH Config"
+            active={activeTab === "sshconfig"}
+            onClick={() => setActiveTab("sshconfig")}
+          />
+          <SettingsTab
+            icon={<Terminal size={18} />}
+            title="Snippets"
+            active={activeTab === "snippets"}
+            onClick={() => setActiveTab("snippets")}
+          />
         </nav>
       </aside>
       <main className="flex-1 overflow-auto bg-bg0">
         {activeTab === "ai" && <AiSettings />}
+        {activeTab === "sshconfig" && <SshConfigSync />}
+        {activeTab === "snippets" && <SnippetManager />}
         {activeTab === "general" && (
           <div className="p-8 max-w-2xl mx-auto space-y-8">
             <div className="space-y-2">

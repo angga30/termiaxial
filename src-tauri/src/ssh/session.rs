@@ -28,71 +28,67 @@ impl SshSession {
         russh::Channel<client::Msg>,
         mpsc::UnboundedReceiver<SshCommand>,
     )> {
-        println!("[SSH DEBUG] Connecting to server...");
+        tracing::debug!("Connecting to server...");
         let config = client::Config {
+            keepalive_interval: Some(Duration::from_secs(30)),
+            keepalive_max: 3,
             ..Default::default()
         };
         let config = Arc::new(config);
         let handler = ClientHandler;
 
         let mut handle = client::connect(config, addr, handler).await?;
-        println!("[SSH DEBUG] TCP Connection established. Starting authentication...");
+        tracing::debug!("TCP Connection established. Starting authentication...");
 
         if let Some(pk) = private_key {
-            println!(
-                "[SSH DEBUG] Authenticating with Public Key for user: {}",
-                user
-            );
+            tracing::debug!("Authenticating with Public Key for user: {}", user);
             // Trim the key to avoid whitespace issues
             let trimmed_pk = pk.trim();
 
             let key = match russh_keys::decode_secret_key(trimmed_pk, None) {
                 Ok(k) => k,
                 Err(e) => {
-                    println!("[SSH DEBUG] Key Decoding Error: {:?}", e);
+                    tracing::error!("Key decoding error: {:?}", e);
                     return Err(anyhow::anyhow!("Could not decode private key: {:?}", e));
                 }
             };
 
             // Log key fingerprint for verification
             if let Ok(pubkey) = key.clone_public_key() {
-                println!("[SSH DEBUG] Key Fingerprint: {}", pubkey.fingerprint());
+                tracing::debug!("Key Fingerprint: {}", pubkey.fingerprint());
             }
 
             let key_pair = Arc::new(key);
 
             if !handle.authenticate_publickey(user, key_pair).await? {
-                println!("[SSH DEBUG] Public key authentication REJECTED");
+                tracing::error!("Public key authentication REJECTED");
                 return Err(anyhow::anyhow!("Public key authentication failed"));
             }
         } else if let Some(pass) = password {
-            println!(
-                "[SSH DEBUG] Authenticating with Password for user: {}",
-                user
-            );
+            tracing::debug!("Authenticating with Password for user: {}", user);
             if !handle.authenticate_password(user, pass).await? {
-                println!("[SSH DEBUG] Password authentication REJECTED");
+                tracing::error!("Password authentication REJECTED");
                 return Err(anyhow::anyhow!("Password authentication failed"));
             }
         } else {
             return Err(anyhow::anyhow!("No authentication method provided"));
         }
 
-        println!("[SSH DEBUG] Authentication successful. Opening session channel...");
+        tracing::info!("Authentication successful. Opening session channel...");
         let channel = handle.channel_open_session().await?;
 
-        println!("[SSH DEBUG] Requesting PTY (xterm-256color)...");
+        tracing::debug!("Requesting PTY (xterm-256color)...");
         channel
             .request_pty(true, "xterm-256color", 80, 24, 0, 0, &[])
             .await?;
 
-        println!("[SSH DEBUG] Requesting Shell...");
+        tracing::debug!("Requesting Shell...");
         channel.request_shell(true).await?;
 
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<SshCommand>();
         let handle = Arc::new(handle);
 
-        println!("[SSH DEBUG] SSH Session fully initialized.");
+        tracing::info!("SSH Session fully initialized");
         Ok((
             Self {
                 cmd_tx,

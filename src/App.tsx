@@ -6,6 +6,9 @@ import { Settings } from "./components/settings/Settings";
 import { AIChatModal } from "./components/ai/AIChatModal";
 import { VaultAuth } from "./components/vault/VaultAuth";
 import { CredentialsView } from "./components/vault/CredentialsView";
+import { HistoryPanel } from "./components/history/HistoryPanel";
+import { SnippetPalette } from "./components/snippet/SnippetPalette";
+import { TunnelPanel } from "./components/tunnel/TunnelPanel";
 import { useState, useEffect, useCallback } from "react";
 import { useVaultStore, Credential } from "./stores/vault-store";
 import { useTerminalStore } from "./stores/terminal-store";
@@ -24,7 +27,7 @@ import { SshOptions } from "./hooks/use-ssh";
 
 function App() {
   const [activeView, setActiveView] = useState<
-    "terminal" | "sftp" | "credentials" | "settings"
+    "terminal" | "sftp" | "credentials" | "settings" | "history" | "tunnels"
   >("terminal");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCredential, setEditingCredential] = useState<Credential | null>(
@@ -32,6 +35,7 @@ function App() {
   );
    const [isVaultCollapsed, setIsVaultCollapsed] = useState(false);
   const [aiContext, setAiContext] = useState<string | null>(null);
+  const [isSnippetPaletteOpen, setIsSnippetPaletteOpen] = useState(false);
 
   const {
     status,
@@ -66,6 +70,17 @@ function App() {
     }
   }, [status, fetchCredentials]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setIsSnippetPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleConnect = useCallback(
     (options: SshOptions, name: string) => {
       addSession(name, options);
@@ -98,6 +113,8 @@ function App() {
         onSftpClick={() => setActiveView("sftp")}
         onCredentialsClick={() => setActiveView("credentials")}
         onSettingsClick={() => setActiveView("settings")}
+        onHistoryClick={() => setActiveView("history")}
+        onTunnelClick={() => setActiveView("tunnels")}
         activeView={activeView}
       />
 
@@ -182,6 +199,18 @@ function App() {
             className={`flex-1 ${activeView === "settings" ? "flex" : "hidden"}`}
           >
             <Settings />
+          </div>
+
+          <div
+            className={`flex-1 ${activeView === "history" ? "flex" : "hidden"}`}
+          >
+            <HistoryPanel />
+          </div>
+
+          <div
+            className={`flex-1 ${activeView === "tunnels" ? "flex" : "hidden"}`}
+          >
+            <TunnelPanel />
           </div>
 
           {activeView === "terminal" && (
@@ -279,6 +308,10 @@ function App() {
 
       {aiContext && (
         <AIChatModal context={aiContext} onClose={() => setAiContext(null)} />
+      )}
+
+      {isSnippetPaletteOpen && (
+        <SnippetPalette onClose={() => setIsSnippetPaletteOpen(false)} />
       )}
 
       <div className="fixed bottom-6 right-6 z-[300] flex flex-col gap-3 w-80 pointer-events-none">
