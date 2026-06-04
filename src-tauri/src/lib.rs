@@ -12,6 +12,7 @@ use crate::commands::sftp::{
 };
 use crate::commands::ssh::{connect_ssh, disconnect_ssh, resize_pty, write_ssh, SessionManager};
 use crate::commands::ssh_config::{ssh_config_detect_changes, ssh_config_sync_from_config, ssh_config_sync_status, ssh_config_write_credential};
+use crate::commands::tunnel::{create_tunnel, close_tunnel, list_tunnels, TunnelManager};
 use crate::domain::events::EventBus;
 use crate::commands::import::{import_detect_sources, import_keys, import_selected, import_ssh_config, import_termius};
 use crate::commands::snippet::{snippet_add, snippet_delete, snippet_list, snippet_search, snippet_update};
@@ -33,6 +34,7 @@ pub fn run() {
             sessions: DashMap::new(),
         })
         .manage(EventBus::new(256))
+        .manage(TunnelManager::new())
         .manage(VaultState(RwLock::new(None)))
         .setup(|app| {
             crate::infrastructure::logging::init();
@@ -88,7 +90,10 @@ pub fn run() {
             ssh_config_sync_status,
             ssh_config_write_credential,
             ssh_config_detect_changes,
-            ssh_config_sync_from_config
+            ssh_config_sync_from_config,
+            create_tunnel,
+            close_tunnel,
+            list_tunnels
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
