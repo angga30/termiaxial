@@ -75,6 +75,12 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+          if [ "${{ matrix.platform.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            echo "[target.aarch64-unknown-linux-gnu]" >> src-tauri/.cargo/config.toml
+            echo 'linker = "aarch64-linux-gnu-gcc"' >> src-tauri/.cargo/config.toml
+            export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
+          fi
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -111,8 +117,12 @@ jobs:
         with:
           name: termiaxial-${{ matrix.platform.name }}
           path: |
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.{dmg,app,deb,AppImage}
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/macos/*.app
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.app
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.AppImage
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.rpm
+          if-no-files-found: warn
           retention-days: 30
 
   release:
@@ -154,7 +164,7 @@ jobs:
           fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           body_path: release_notes.md
