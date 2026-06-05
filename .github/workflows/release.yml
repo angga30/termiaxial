@@ -101,7 +101,13 @@ jobs:
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-        run: npm run tauri build -- --target ${{ matrix.platform.target }}
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            npm run tauri build -- --target ${{ matrix.platform.target }} --bundles app
+          else
+            npm run tauri build -- --target ${{ matrix.platform.target }}
+          fi
+        shell: bash
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
