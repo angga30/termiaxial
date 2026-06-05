@@ -25,7 +25,6 @@ dist-ssr
 
 # Rust / Cargo
 /src-tauri/target/
-Cargo.lock
 **/*.rs.bk
 *.pdb
 
